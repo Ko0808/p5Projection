@@ -3,6 +3,10 @@ let handPose;
 let video;
 let hands = [];
 
+// --- player 2 & state ---
+let p2Ship;
+let p1Health = 100;
+
 // --- rocket state ---
 let pos;
 let vel;
@@ -30,6 +34,9 @@ function setup() {
   pos = createVector(0, height / 2);
   vel = createVector(0, 0);
   accel = createVector(0, 0);
+
+  // Init player 2 ship
+  p2Ship = new Player2Ship();
 }
 
 function windowResized() {
@@ -81,6 +88,21 @@ function draw() {
   pos.add(vel);
   accel.mult(0);
 
+  // Update and draw Player 2
+  p2Ship.update();
+  p2Ship.draw();
+
+  // Collision detection between P2 lasers and P1 rocket
+  for (let i = p2Ship.lasers.length - 1; i >= 0; i--) {
+    let laser = p2Ship.lasers[i];
+    // Check distance between laser line and player 1 center
+    if (dist(laser.x, laser.y, pos.x, pos.y) < 35) {
+      p1Health -= 10;
+      p2Ship.lasers.splice(i, 1); // remove laser on hit
+    }
+  }
+
+  // Draw players
   handleEdges();
   drawRocket(pos.x, pos.y, angle, vel.mag() > 0.5);
   drawUI();
@@ -166,7 +188,16 @@ function drawUI() {
   textSize(20);
   text(nf(speed, 1, 1), panelX + 12, panelY + 26);
 
-  // Bar track
+  // Player 1 Health Number
+  fill(160);
+  textSize(11);
+  text('P1 HEALTH', panelX + 80, panelY + 12);
+  fill(p1Health > 30 ? 255 : color(255, 50, 50));
+  textSize(20);
+  text(max(0, p1Health) + '%', panelX + 80, panelY + 26);
+
+  // Bar track for speed
+
   fill(40);
   rect(panelX + 12, panelY + 52, panelW - 24, 10, 5);
 
@@ -219,4 +250,10 @@ function drawUI() {
   circle(cx, cy, 4);
 
   pop();
+}
+
+function mousePressed() {
+  if (mouseButton === LEFT && p2Ship) {
+    p2Ship.fire();
+  }
 }
