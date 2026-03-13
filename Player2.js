@@ -1,10 +1,10 @@
 class Player2Ship {
     constructor() {
-        this.x = width * 0.75; // 初始在右半场中心
+        this.x = width * 0.75;
         this.y = height / 2;
         this.size = 60;
         this.lasers = [];
-        this.fireCooldown = 0; // 新增：开火冷却时间，防止一帧射出太多激光
+        this.fireCooldown = 0;
     }
 
     update(hand) {
@@ -13,19 +13,51 @@ class Player2Ship {
             let indexTip = getMappedPoint(hand.index_finger_tip);
             let thumbTip = getMappedPoint(hand.thumb_tip);
 
-            // 平滑移动飞碟到手腕位置
-            this.x = lerp(this.x, wrist.x, 0.2);
-            this.y = lerp(this.y, wrist.y, 0.2);
+            // ==========================================
+            // 核心优化 1：虚拟摇杆 (速度控制取代位置控制)
+            // ==========================================
+
+            // 设定右半场中心为摇杆的“物理死区（中心锚点）”
+            let anchor = createVector(width * 0.75, height / 2);
+
+            // 计算手腕偏离锚点的向量距离和方向
+            let offset = p5.Vector.sub(wrist, anchor);
+            let distance = offset.mag();
+
+            // 死区设定：手在中心 40 像素内不移动，防止轻微抖动导致飞船乱飘
+            if (distance > 40) {
+                // 将手的偏离距离映射为飞船速度 (距离越远，速度越快，最高 12)
+                let maxSpeed = 12;
+                let currentSpeed = map(distance, 40, 250, 1, maxSpeed, true);
+
+                // 提取方向并乘以当前速度
+                offset.normalize();
+                offset.mult(currentSpeed);
+
+                // 累加到飞船坐标上 (持续移动)
+                this.x += offset.x;
+                this.y += offset.y;
+            }
 
             // 限制画面边界（取消中线的强制限位）
             this.x = constrain(this.x, this.size / 2, width - this.size / 2);
             this.y = constrain(this.y, this.size / 2, height - this.size / 2);
 
-            // 捏合手指 (Pinch) 判定开火
+            // ==========================================
+            // 核心优化 2：动态捏合阈值 (防远近失效)
+            // ==========================================
+
+            // 取食指根部到手腕的距离，作为这只手当前在画面中的"基础大小"
+            let indexBase = getMappedPoint(hand.index_finger_mcp);
+            let handSize = dist(wrist.x, wrist.y, indexBase.x, indexBase.y);
+
+            // 捏合阈值设为手掌大小的 60%
+            let pinchThreshold = handSize * 0.6;
             let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
-            if (d < 40 && this.fireCooldown <= 0) {
+
+            if (d < pinchThreshold && this.fireCooldown <= 0) {
                 this.fire();
-                this.fireCooldown = 15; // 冷却时间 (0.5秒)
+                this.fireCooldown = 15;
             }
         }
 
@@ -57,7 +89,7 @@ class Player2Ship {
     }
 
     fire() {
-        // 激光稍微向左偏，射向 Player 1 的区域
+        // 激光向左下方发射
         this.lasers.push(new Laser(this.x, this.y));
         if (typeof laserSound !== 'undefined' && laserSound.isLoaded()) {
             laserSound.play(); // 播放激光音效
@@ -69,7 +101,7 @@ class Laser {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.speedX = -5; // 新增：激光向左飞
+        this.speedX = -5; // 激光向左飞
         this.speedY = 5;  // 激光向下飞
     }
 

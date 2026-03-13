@@ -58,6 +58,7 @@ function setup() {
 function mousePressed() {
   userStartAudio();
   if (!bgmSound.isPlaying()) {
+    bgmSound.setLoop(true); // 明示的にループ再生を維持するよう設定
     bgmSound.loop();
   }
 }
