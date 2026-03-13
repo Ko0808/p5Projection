@@ -28,8 +28,8 @@ let orbitTargetAngle = 0;
 
 // --- physics constants ---
 const FRICTION = 0.95;
-const POWER = 0.1;
-const MAX_SPEED = 2;
+const POWER = 0.2;
+let MAX_SPEED = 2; // Will be updated dynamically in draw()
 
 function preload() {
   handPose = ml5.handPose();
@@ -83,6 +83,9 @@ function getMappedPoint(keypoint) {
 }
 
 function draw() {
+  // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
+  MAX_SPEED = 2 * max(0.1, p1Health / 100);
+
   background(5, 10, 25);
 
   // Draw mirrored video at low opacity.
@@ -353,7 +356,9 @@ function drawUI() {
 
   // --- Speed meter ---
   let speed = vel.mag();
-  let speedRatio = speed / MAX_SPEED;
+  let absoluteMaxSpeed = 2; // 体力MAX時の本当の最高速度
+  let currentSpeedRatio = speed / absoluteMaxSpeed;
+  let maxPotentialRatio = MAX_SPEED / absoluteMaxSpeed; // ダメージによる上限ライン
 
   fill(160);
   noStroke();
@@ -373,15 +378,22 @@ function drawUI() {
   textSize(20);
   text(max(0, p1Health) + '%', panelX + 80, panelY + 26);
 
-  // Bar track for speed
-
-  fill(40);
+  // Bar track for total possible speed
+  fill(40); // 根本的な背景
   rect(panelX + 12, panelY + 52, panelW - 24, 10, 5);
 
-  // Bar fill — green → red with speed
-  let barColor = lerpColor(color(0, 220, 120), color(255, 60, 60), speedRatio);
+  // ダメージによって到達不能になった部分を赤黒く可視化
+  if (maxPotentialRatio < 1.0) {
+    fill(80, 20, 20); // 暗めの赤
+    let lostWidth = (panelW - 24) * (1.0 - maxPotentialRatio);
+    let startX = (panelX + 12) + (panelW - 24) * maxPotentialRatio;
+    rect(startX, panelY + 52, lostWidth, 10, 5);
+  }
+
+  // Bar fill — green → red with speed (現在のスピードバー)
+  let barColor = lerpColor(color(0, 220, 120), color(255, 60, 60), currentSpeedRatio);
   fill(barColor);
-  rect(panelX + 12, panelY + 52, (panelW - 24) * speedRatio, 10, 5);
+  rect(panelX + 12, panelY + 52, (panelW - 24) * currentSpeedRatio, 10, 5);
 
   // --- Direction compass ---
   let cx = panelX + panelW / 2;
