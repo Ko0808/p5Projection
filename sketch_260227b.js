@@ -28,8 +28,8 @@ let orbitTargetAngle = 0;
 
 // --- physics constants ---
 const FRICTION = 0.95;
-const POWER = 0.1;
-const MAX_SPEED = 2;
+const POWER = 0.2;
+let MAX_SPEED = 2; // Will be updated dynamically in draw()
 
 function preload() {
   handPose = ml5.handPose();
@@ -83,6 +83,9 @@ function getMappedPoint(keypoint) {
 }
 
 function draw() {
+  // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
+  MAX_SPEED = 4 * max(0.1, p1Health / 100);
+
   background(5, 10, 25);
 
   // Draw mirrored video at low opacity.
@@ -185,7 +188,7 @@ function draw() {
       orbitRadius = dist(pos.x, pos.y, centerX, centerY);
       orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
       if (orbitAngle < 0) orbitAngle += TWO_PI;
-      orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
+      orbitTargetAngle = orbitAngle + radians(330); // 315度 (7/8周) 回ったところで自然に放出する
     } else if (isFlipped && pos.x < 100) {
       // 一気にリセット (アニメーションなし)
       isFlipped = false;
@@ -224,11 +227,9 @@ function draw() {
       isTransitioning = false;
       isFlipped = true;
 
-      // Position after orbit completion
-      pos.x = width - 150;
-      pos.y = height / 2;
-      angle = PI + HALF_PI; // Face entirely left
-      vel.set(0, 0);
+      // 座標や角度は強制上書きせず、現在の状態を維持して放出する
+      // 円運動の勢い（接線方向の速度）を与えてスムーズに復帰させる
+      vel = p5.Vector.fromAngle(angle - HALF_PI).mult(MAX_SPEED * 2);
       p1Health = 100; // HP回復
 
       for (let m of meteorites) {
