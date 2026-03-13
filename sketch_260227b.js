@@ -19,6 +19,13 @@ let vel;
 let accel;
 let angle = 90;
 
+// --- scene transition state ---
+let isTransitioning = false;
+let isFlipped = false;
+let orbitAngle = 0;
+let orbitRadius = 0;
+let orbitTargetAngle = 0;
+
 // --- physics constants ---
 const FRICTION = 0.95;
 const POWER = 0.1;
@@ -58,7 +65,7 @@ function setup() {
 function mousePressed() {
   userStartAudio();
   if (!bgmSound.isPlaying()) {
-    bgmSound.setLoop(true); // 明示的にループ再生を維持するよう設定
+    bgmSound.setLoop(true);
     bgmSound.loop();
   }
 }
@@ -103,13 +110,21 @@ function draw() {
   // ==========================================
   push();
   noStroke();
-  // Left side orb (P1 zone) - blueish
-  fill(0, 150, 255, 30);
-  ellipse(-100, height / 2, width * 0.4, height * 0.8);
-
-  // Right side orb (P2 zone) - greenish
-  fill(150, 255, 150, 30);
-  ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+  if (isFlipped) {
+    // Left side orb is now P2 zone (greenish)
+    fill(150, 255, 150, 30);
+    ellipse(-100, height / 2, width * 0.4, height * 0.8);
+    // Right side orb is now P1 zone (blueish)
+    fill(0, 150, 255, 30);
+    ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+  } else {
+    // Left side orb (P1 zone) - blueish
+    fill(0, 150, 255, 30);
+    ellipse(-100, height / 2, width * 0.4, height * 0.8);
+    // Right side orb (P2 zone) - greenish
+    fill(150, 255, 150, 30);
+    ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+  }
   pop();
 
   // ==========================================
@@ -131,31 +146,105 @@ function draw() {
   // ==========================================
   // --- Player 1 Logic (Left Half) ---
   // ==========================================
-  if (p1Hand) {
-    let wrist = getMappedPoint(p1Hand.wrist);
-    let middle = getMappedPoint(p1Hand.middle_finger_mcp);
-    let indexTip = getMappedPoint(p1Hand.index_finger_tip);
-    let thumbTip = getMappedPoint(p1Hand.thumb_tip);
+  if (!isTransitioning) {
+    if (p1Hand) {
+      let wrist = getMappedPoint(p1Hand.wrist);
+      let middle = getMappedPoint(p1Hand.middle_finger_mcp);
+      let indexTip = getMappedPoint(p1Hand.index_finger_tip);
+      let thumbTip = getMappedPoint(p1Hand.thumb_tip);
 
-    let targetAngle = atan2(middle.y - wrist.y, middle.x - wrist.x) + PI;
-    angle = lerpAngle(angle, targetAngle, 0.15);
+      let targetAngle = atan2(middle.y - wrist.y, middle.x - wrist.x) + PI;
+      if (isFlipped) {
+        targetAngle += PI; // シーン反転時は進行方向を180度反転させる
+      }
+      angle = lerpAngle(angle, targetAngle, 0.15);
 
-    let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
+      let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
 
-    if (d > 40) { // Open fingers -> Thrust
-      let dynamicPower = map(d, 40, 150, 0.1, POWER * 2.5, true);
-      let force = p5.Vector.fromAngle(angle - HALF_PI);
-      force.mult(dynamicPower);
-      accel.add(force);
+      if (d > 40) { // Open fingers -> Thrust
+        let dynamicPower = map(d, 40, 150, 0.1, POWER * 2.5, true);
+        let force = p5.Vector.fromAngle(angle - HALF_PI);
+        force.mult(dynamicPower);
+        accel.add(force);
+      }
+    }
+
+    // Physics update
+    vel.add(accel);
+    vel.limit(MAX_SPEED);
+    vel.mult(FRICTION);
+    pos.add(vel);
+    accel.mult(0);
+
+    // Check transition trigger (Right -> Left OR Left -> Right)
+    if (!isFlipped && pos.x > width - 100) {
+      // Trigger orbit around RIGHT orb
+      isTransitioning = true;
+      let centerX = width + 170;
+      let centerY = height / 2;
+      orbitRadius = dist(pos.x, pos.y, centerX, centerY);
+      orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
+      if (orbitAngle < 0) orbitAngle += TWO_PI;
+      orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
+    } else if (isFlipped && pos.x < 100) {
+      // Trigger orbit around LEFT orb
+      isTransitioning = true;
+      let centerX = -100;
+      let centerY = height / 2;
+      orbitRadius = dist(pos.x, pos.y, centerX, centerY);
+      orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
+      if (orbitAngle < 0) orbitAngle += TWO_PI;
+      orbitTargetAngle = orbitAngle - TWO_PI; // Orbit full circle (counter-moth)
+    }
+  } else {
+    // Orbit Animation
+    let centerX = (!isFlipped) ? width + 170 : -100;
+    let centerY = height / 2;
+
+    // Rotate in direction based on whether we are moving left or right
+    if (!isFlipped) {
+      orbitAngle += 0.05;
+    } else {
+      orbitAngle -= 0.05;
+    }
+
+    pos.x = centerX + cos(orbitAngle) * orbitRadius;
+    pos.y = centerY + sin(orbitAngle) * orbitRadius;
+
+    // Point tangentially based on orbit direction
+    if (!isFlipped) {
+      angle = orbitAngle + HALF_PI;
+    } else {
+      angle = orbitAngle - HALF_PI;
+    }
+
+    // Check completion condition
+    let finishedTrans = (!isFlipped) ? (orbitAngle >= orbitTargetAngle) : (orbitAngle <= orbitTargetAngle);
+
+    if (finishedTrans) {
+      isTransitioning = false;
+      isFlipped = !isFlipped; // 反転（true -> false, false -> true）
+
+      // Position after orbit completion
+      if (isFlipped) {
+        // Just flipped to P2 side
+        pos.x = width - 150;
+        pos.y = height / 2;
+        angle = PI + HALF_PI; // Face entirely left
+      } else {
+        // Flipped back to normal (P1 side)
+        pos.x = 150;
+        pos.y = height / 2;
+        angle = HALF_PI; // Face entirely right
+      }
+
+      vel.set(0, 0);
+
+      for (let m of meteorites) {
+        m.reset();
+      }
     }
   }
-
-  // Physics update
-  vel.add(accel);
-  vel.limit(MAX_SPEED);
-  vel.mult(FRICTION);
-  pos.add(vel);
-  accel.mult(0);
 
   // ==========================================
   // --- Player 2 & Environment Update (Right Half) ---
@@ -196,8 +285,19 @@ function draw() {
 // Boundary handling: When the rocket reaches the edges, it loops to the opposite side
 // It can cross the screen divider and move to the other side.
 function handleEdges() {
-  if (pos.x > width) pos.x = 0;
-  if (pos.x < 0) pos.x = width;
+  if (isTransitioning) return; // アニメーション中は壁の判定を無効化する
+
+  // 左右（X軸）はループを廃止し、見えない壁にする（バグ防止）
+  if (pos.x > width) {
+    pos.x = width;
+    vel.x = 0;
+  }
+  if (pos.x < 0) {
+    pos.x = 0;
+    vel.x = 0;
+  }
+
+  // 上下（Y軸）は今まで通りループさせる
   if (pos.y > height) pos.y = 0;
   if (pos.y < 0) pos.y = height;
 }

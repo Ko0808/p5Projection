@@ -19,6 +19,12 @@ class Player2Ship {
             this.y = lerp(this.y, wrist.y, 0.1);
             this.y = constrain(this.y, this.size / 2, height - this.size / 2);
 
+            if (typeof isFlipped !== 'undefined' && isFlipped) {
+                this.x = lerp(this.x, 230, 0.1);
+            } else {
+                this.x = lerp(this.x, width - 230, 0.1);
+            }
+
             // [Minimalist Firing] Pinch fingers to fire
             let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
             if (d < 40 && this.fireCooldown <= 0) {
@@ -63,7 +69,11 @@ class Laser {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.speedX = -15; // [Minimalist Trajectory] Always fly straight to the left!
+        if (typeof isFlipped !== 'undefined' && isFlipped) {
+            this.speedX = 15;
+        } else {
+            this.speedX = -15; // [Minimalist Trajectory] Always fly straight to the left!
+        }
     }
 
     update() {
@@ -75,11 +85,15 @@ class Laser {
         stroke(255, 50, 50);
         strokeWeight(6);
         // Draw a simple horizontal laser line
-        line(this.x, this.y, this.x + 30, this.y);
+        let tailLength = (this.speedX > 0) ? -30 : 30;
+        line(this.x, this.y, this.x + tailLength, this.y);
         pop();
     }
 
     isOffScreen() {
+        if (typeof isFlipped !== 'undefined' && isFlipped) {
+            return this.x > width;
+        }
         return this.x < 0; // Destroy when flying out of the left side of the screen
     }
 }
@@ -90,16 +104,27 @@ class Meteorite {
     }
 
     reset() {
-        this.x = width + random(50, 600);
+        if (typeof isFlipped !== 'undefined' && isFlipped) {
+            this.x = -random(50, 600);
+            this.speed = -random(1, 2.3);
+        } else {
+            this.x = width + random(50, 600);
+            this.speed = random(1, 2.3);
+        }
         this.y = random(50, height - 50);
-        this.speed = random(1, 2.3);
         this.size = random(20, 45);
     }
 
     update() {
         this.x -= this.speed;
-        if (this.x < -this.size) {
-            this.reset();
+        if (typeof isFlipped !== 'undefined' && isFlipped) {
+            if (this.x > width + this.size) {
+                this.reset();
+            }
+        } else {
+            if (this.x < -this.size) {
+                this.reset();
+            }
         }
     }
 
