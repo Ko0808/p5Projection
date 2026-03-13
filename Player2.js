@@ -59,6 +59,9 @@ class Player2Ship {
     fire() {
         // 激光稍微向左偏，射向 Player 1 的区域
         this.lasers.push(new Laser(this.x, this.y));
+        if (typeof laserSound !== 'undefined' && laserSound.isLoaded()) {
+            laserSound.play(); // 播放激光音效
+        }
     }
 }
 

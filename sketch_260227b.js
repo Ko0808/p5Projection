@@ -3,6 +3,11 @@ let handPose;
 let video;
 let hands = [];
 
+// --- sounds ---
+let bgmSound;
+let explosionSound;
+let laserSound;
+
 // --- player 2 & state ---
 let p2Ship;
 let meteorites = [];
@@ -21,6 +26,9 @@ const MAX_SPEED = 2;
 
 function preload() {
   handPose = ml5.handPose();
+  bgmSound = loadSound('SoundEffect/bgm.mp3');
+  explosionSound = loadSound('SoundEffect/explosion.mp3');
+  laserSound = loadSound('SoundEffect/lazer.mp3');
 }
 
 function setup() {
@@ -44,6 +52,14 @@ function setup() {
   }
 
   frameRate(30); // 稳定帧率，双人手势识别比较吃性能
+}
+
+// Ensure audio starts on first user interaction if blocked by browser
+function mousePressed() {
+  userStartAudio();
+  if (!bgmSound.isPlaying()) {
+    bgmSound.loop();
+  }
 }
 
 function windowResized() {
@@ -151,6 +167,7 @@ function draw() {
   for (let m of meteorites) {
     if (dist(m.x, m.y, pos.x, pos.y) < m.size / 2 + 15) {
       p1Health -= 5; // 陨石伤害可以调整
+      explosionSound.play(); // 播放爆炸音效
       m.reset(); // 撞击后重置陨石
     }
   }
