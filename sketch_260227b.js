@@ -5,6 +5,7 @@ let hands = [];
 
 // --- player 2 & state ---
 let p2Ship;
+let meteorites = [];
 let p1Health = 100;
 
 // --- rocket state ---
@@ -15,8 +16,8 @@ let angle = 90;
 
 // --- physics constants ---
 const FRICTION = 0.95;
-const POWER = 0.4;
-const MAX_SPEED = 8;
+const POWER = 0.1;
+const MAX_SPEED = 2;
 
 function preload() {
   handPose = ml5.handPose();
@@ -31,16 +32,30 @@ function setup() {
 
   handPose.detectStart(video, gotHands);
 
-  pos = createVector(0, height / 2);
+  pos = createVector(width / 4, height / 2);
   vel = createVector(0, 0);
   accel = createVector(0, 0);
 
   // Init player 2 ship
   p2Ship = new Player2Ship();
+
+  for (let i = 0; i < 4; i++) {
+    meteorites.push(new Meteorite());
+  }
+
+  frameRate(30); // 稳定帧率，双人手势识别比较吃性能
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+}
+
+// 核心辅助函数：将摄像头的原始坐标映射到我们镜像翻转后的画布上
+function getMappedPoint(keypoint) {
+  // 注意这里 width 和 0 是反过来的，为了匹配 scale(-1, 1) 的镜像效果
+  let mx = map(keypoint.x, 0, video.width, width, 0);
+  let my = map(keypoint.y, 0, video.height, 0, height);
+  return createVector(mx, my);
 }
 
 function draw() {
@@ -56,24 +71,47 @@ function draw() {
   drawingContext.globalAlpha = 1.0;
   pop();
 
-  if (hands.length > 0) {
-    let hand = hands[0];
+  // ==========================================
+  // --- 画面分割线 ---
+  // ==========================================
+  push();
+  stroke(0, 200, 255, 150);
+  strokeWeight(2);
+  drawingContext.setLineDash([15, 15]); // 虚线效果
+  line(width / 2, 0, width / 2, height);
+  pop();
 
-    // Compute target angle from wrist → middle finger MCP.
-    // +PI offsets so the rocket direction is 90° from the hand orientation.
-    let wrist = hand.wrist;
-    let middle = hand.middle_finger_mcp;
+  // ==========================================
+  // --- 双手分离与分配逻辑 ---
+  // ==========================================
+  let p1Hand = null;
+  let p2Hand = null;
+
+  for (let hand of hands) {
+    let mappedWrist = getMappedPoint(hand.wrist);
+    // 判断手在屏幕左侧还是右侧
+    if (mappedWrist.x < width / 2) {
+      p1Hand = hand;
+    } else {
+      p2Hand = hand;
+    }
+  }
+
+  // ==========================================
+  // --- Player 1 Logic (左半场) ---
+  // ==========================================
+  if (p1Hand) {
+    let wrist = getMappedPoint(p1Hand.wrist);
+    let middle = getMappedPoint(p1Hand.middle_finger_mcp);
+    let indexTip = getMappedPoint(p1Hand.index_finger_tip);
+    let thumbTip = getMappedPoint(p1Hand.thumb_tip);
+
     let targetAngle = atan2(middle.y - wrist.y, middle.x - wrist.x) + PI;
     angle = lerpAngle(angle, targetAngle, 0.15);
 
-    // Use index-thumb spread (px) to modulate thrust power.
-    let d = dist(
-      hand.index_finger_tip.x, hand.index_finger_tip.y,
-      hand.thumb_tip.x, hand.thumb_tip.y
-    );
+    let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
 
-    if (d > 40) {
-      // Map spread (40–150 px) to power (0.1 – POWER×2.5), clamped.
+    if (d > 40) { // 张开手指 -> 推进
       let dynamicPower = map(d, 40, 150, 0.1, POWER * 2.5, true);
       let force = p5.Vector.fromAngle(angle - HALF_PI);
       force.mult(dynamicPower);
@@ -88,8 +126,15 @@ function draw() {
   pos.add(vel);
   accel.mult(0);
 
-  // Update and draw Player 2
-  p2Ship.update();
+  // ==========================================
+  // --- Player 2 & Environment Update (右半场) ---
+  // ==========================================
+  for (let m of meteorites) {
+    m.update();
+    m.draw();
+  }
+
+  p2Ship.update(p2Hand); // 把分好的右手数据传给 Player 2
   p2Ship.draw();
 
   // Collision detection between P2 lasers and P1 rocket
@@ -102,13 +147,22 @@ function draw() {
     }
   }
 
+  // Collision detection between Meteorites and P1 rocket
+  for (let m of meteorites) {
+    if (dist(m.x, m.y, pos.x, pos.y) < m.size / 2 + 15) {
+      p1Health -= 5; // 陨石伤害可以调整
+      m.reset(); // 撞击后重置陨石
+    }
+  }
+
   // Draw players
   handleEdges();
   drawRocket(pos.x, pos.y, angle, vel.mag() > 0.5);
   drawUI();
 }
 
-// Wrap rocket position at canvas edges.
+// 边界处理：ロケットが上下や左右の端に来た場合、反対側にループする
+// 画面の分割線を越えて向こう側へ移動できるようになります。
 function handleEdges() {
   if (pos.x > width) pos.x = 0;
   if (pos.x < 0) pos.x = width;
@@ -250,10 +304,4 @@ function drawUI() {
   circle(cx, cy, 4);
 
   pop();
-}
-
-function mousePressed() {
-  if (mouseButton === LEFT && p2Ship) {
-    p2Ship.fire();
-  }
 }
