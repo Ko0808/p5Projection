@@ -19,6 +19,8 @@ let vel;
 let accel;
 let angle = 90;
 let p1Trail = [];
+let currentJoyDX = 0;
+let currentJoyDY = 0;
 
 // --- Game State & VFX (Merged) ---
 let energyOrbs = [];
@@ -251,15 +253,30 @@ function draw() {
   // --- Player 1 Logic (Left Half) ---
   // ==========================================
   if (!isTransitioning) {
+    if (!p1Hand) {
+      currentJoyDX = lerp(currentJoyDX, 0, 0.2); // Smoothly return to center when hand is lost
+      currentJoyDY = lerp(currentJoyDY, 0, 0.2);
+    }
+
+    let controlOriginX = width * 0.25;
+    let controlOriginY = height / 2;
+
     if (p1Hand) {
       let wrist = getMappedPoint(p1Hand.wrist);
-      let middle = getMappedPoint(p1Hand.middle_finger_mcp);
       let indexTip = getMappedPoint(p1Hand.index_finger_tip);
       let thumbTip = getMappedPoint(p1Hand.thumb_tip);
 
-      let targetAngle = atan2(middle.y - wrist.y, middle.x - wrist.x) + PI;
-      if (isFlipped) {
-        targetAngle += PI; // シーン反転時は進行方向を180度反転させる
+      // 基準点と手の位置（手首）から角度を計算
+      let dx = wrist.x - controlOriginX;
+      let dy = wrist.y - controlOriginY;
+
+      currentJoyDX = dx;
+      currentJoyDY = dy;
+
+      let targetAngle = angle;
+      // 中心から20px以上離れている時だけ角度を更新（手ブレ防止）
+      if (dist(0, 0, dx, dy) > 20) {
+        targetAngle = atan2(dy, dx) + HALF_PI;
       }
       angle = lerpAngle(angle, targetAngle, 0.15);
 
@@ -650,34 +667,39 @@ function drawUI() {
   fill(barColor);
   rect(p1PanelX + 12, p1PanelY + 52, (panelW - 24) * currentSpeedRatio, 10, 5);
 
-  // Direction compass
+  // Virtual Joystick UI (replaces direction compass)
   let cx1 = p1PanelX + panelW / 2;
   let cy1 = p1PanelY + 112;
-  let r = 24;
+  let r = 26; // Outer radius
 
+  // Draw base
   stroke(80);
-  strokeWeight(1.5);
-  noFill();
+  strokeWeight(2);
+  fill(0, 0, 0, 100);
   circle(cx1, cy1, r * 2);
 
-  let dir = angle - HALF_PI;
-  let ax = cx1 + cos(dir) * r * 0.75;
-  let ay = cy1 + sin(dir) * r * 0.75;
+  // Draw deadzone
+  stroke(255, 255, 255, 50);
+  strokeWeight(1);
+  circle(cx1, cy1, r * 0.4);
 
-  stroke(0, 200, 255);
+  // Draw stick position
+  // Physically 150 pixels displacement maps to the UI radius
+  let stickRadius = min(r, dist(0, 0, currentJoyDX, currentJoyDY) * (r / 150));
+  let stickHeading = atan2(currentJoyDY, currentJoyDX);
+
+  let sx = cx1 + cos(stickHeading) * stickRadius;
+  let sy = cy1 + sin(stickHeading) * stickRadius;
+
+  stroke(0, 200, 255, 150);
   strokeWeight(2);
-  line(cx1, cy1, ax, ay);
+  line(cx1, cy1, sx, sy);
 
-  push();
-  fill(0, 200, 255);
   noStroke();
-  translate(ax, ay);
-  rotate(dir);
-  triangle(0, -5, -3, 4, 3, 4);
-  pop();
+  fill(0, 200, 255, 200);
+  circle(sx, sy, 10);
 
   fill(255);
-  noStroke();
   circle(cx1, cy1, 4);
   pop();
 
