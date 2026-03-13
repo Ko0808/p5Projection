@@ -1,7 +1,7 @@
 class Player2Ship {
     constructor() {
         // UFO fixed at the right edge of the screen
-        this.x = width - 60;
+        this.x = width - 230;
         this.y = height / 2;
         this.size = 60;
         this.lasers = [];

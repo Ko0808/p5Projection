@@ -99,6 +99,20 @@ function draw() {
   pop();
 
   // ==========================================
+  // --- Edge Decorative Orbs ---
+  // ==========================================
+  push();
+  noStroke();
+  // Left side orb (P1 zone) - blueish
+  fill(0, 150, 255, 30);
+  ellipse(-100, height / 2, width * 0.4, height * 0.8);
+
+  // Right side orb (P2 zone) - greenish
+  fill(150, 255, 150, 30);
+  ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+  pop();
+
+  // ==========================================
   // --- Hand Separation and Assignment Logic ---
   // ==========================================
   let p1Hand = null;
