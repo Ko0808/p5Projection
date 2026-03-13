@@ -18,6 +18,15 @@ let pos;
 let vel;
 let accel;
 let angle = 90;
+let p1Trail = [];
+
+// --- Game State & VFX (Merged) ---
+let energyOrbs = [];
+let energyProgress = 0; // 清洁能源收集进度 (0-100)
+let particles = [];
+let shakeMag = 0;
+let stars = [];
+let gridOffset = 0;
 
 // --- scene transition state ---
 let isTransitioning = false;
@@ -58,7 +67,54 @@ function setup() {
     meteorites.push(new Meteorite());
   }
 
+  for (let i = 0; i < 2; i++) {
+    energyOrbs.push(new EnergyOrb());
+  }
+
+  for (let i = 0; i < 150; i++) {
+    stars.push({
+      x: random(width),
+      y: random(height),
+      size: random(1.5, 3.5),
+      offset: random(TWO_PI),
+      speed: random(0.02, 0.08)
+    });
+  }
+
   frameRate(30); // Stable frame rate, dual-hand gesture recognition is computationally expensive
+}
+
+// ----------------------------------------------------
+// UI & Visual Effects Functions
+// ----------------------------------------------------
+
+function drawGrid() {
+  push();
+  stroke(0, 255, 255, 15);
+  strokeWeight(1);
+  gridOffset += vel.mag() * 0.5;
+  if (gridOffset > 40) gridOffset = 0;
+
+  for (let x = -width; x < width * 2; x += 40) {
+    line(x - gridOffset, 0, x - gridOffset, height);
+  }
+  for (let y = -height; y < height * 2; y += 40) {
+    line(0, y, width, y);
+  }
+  pop();
+}
+
+function drawStars() {
+  push();
+  noStroke();
+  for (let s of stars) {
+    let alpha = map(sin(frameCount * s.speed + s.offset), -1, 1, 10, 255);
+    fill(255, 255, 255, alpha * 0.3);
+    circle(s.x, s.y, s.size * 2.5);
+    fill(255, 255, 255, alpha);
+    circle(s.x, s.y, s.size);
+  }
+  pop();
 }
 
 // Ensure audio starts on first user interaction if blocked by browser
@@ -82,11 +138,51 @@ function getMappedPoint(keypoint) {
   return createVector(mx, my);
 }
 
+function triggerShake(magnitude) {
+  shakeMag = magnitude;
+}
+
+function spawnExplosion(x, y, col, count = 20) {
+  for (let i = 0; i < count; i++) {
+    particles.push(new Particle(x, y, col));
+  }
+}
+
+function respawnPlayer1() {
+  p1Health = 100;
+  energyProgress = 0; // 重生时清零能量进度，增加惩罚感
+  isFlipped = false;
+  isTransitioning = false;
+  pos.x = 150;
+  pos.y = height / 2;
+  vel.set(0, 0);
+  accel.set(0, 0);
+  angle = HALF_PI;
+  p1Trail = [];
+
+  for (let m of meteorites) {
+    if (m) m.reset();
+  }
+  for (let orb of energyOrbs) {
+    if (orb) orb.reset();
+  }
+  if (p2Ship) p2Ship.lasers = [];
+  if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) {
+    explosionSound.play();
+  }
+}
+
 function draw() {
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
   MAX_SPEED = 2 * max(0.1, p1Health / 100);
 
   background(5, 10, 25);
+
+  push(); // MAIN SCREEN SHAKE PUSH
+  if (shakeMag > 0.1) {
+    translate(random(-shakeMag, shakeMag), random(-shakeMag, shakeMag));
+    shakeMag *= 0.85;
+  }
 
   // Draw mirrored video at low opacity.
   // Using globalAlpha instead of tint() for hardware-accelerated blending.
@@ -97,6 +193,9 @@ function draw() {
   image(video, 0, 0, width, height);
   drawingContext.globalAlpha = 1.0;
   pop();
+
+  drawGrid();
+  drawStars();
 
   // ==========================================
   // --- Screen Divider ---
@@ -179,6 +278,9 @@ function draw() {
     pos.add(vel);
     accel.mult(0);
 
+    p1Trail.push(createVector(pos.x, pos.y));
+    if (p1Trail.length > 15) p1Trail.shift();
+
     // Check transition trigger (Right -> Left OR Left -> Right)
     if (!isFlipped && pos.x > width - 100) {
       // Trigger orbit around RIGHT orb
@@ -190,16 +292,7 @@ function draw() {
       if (orbitAngle < 0) orbitAngle += TWO_PI;
       orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
     } else if (isFlipped && pos.x < 100) {
-      // 一気にリセット (アニメーションなし)
-      isFlipped = false;
-      pos.x = 150;
-      pos.y = height / 2;
-      angle = HALF_PI; // Face entirely right
-      vel.set(0, 0);
-      p1Health = 100; // HP回復
-      for (let m of meteorites) {
-        m.reset();
-      }
+      respawnPlayer1();
     }
   } else {
     // =====================================
@@ -219,6 +312,9 @@ function draw() {
     // ロケットの機首（0度=上）を円の進行方向（時計回りの接線方向）へ向ける
     angle = orbitAngle + Math.PI;
 
+    p1Trail.push(createVector(pos.x, pos.y));
+    if (p1Trail.length > 15) p1Trail.shift();
+
     // Check completion condition
     let finishedTrans = (orbitAngle >= orbitTargetAngle);
 
@@ -233,46 +329,122 @@ function draw() {
       angle = PI + HALF_PI; // Face entirely left
       vel.set(0, 0);
       p1Health = 100; // HP回復
+      energyProgress = 0; // 重生时清零能量进度，增加惩罚感
+      p1Trail = [];
 
       for (let m of meteorites) {
         m.reset();
+      }
+      for (let orb of energyOrbs) {
+        orb.reset();
       }
     }
   }
 
   // ==========================================
-  // --- Player 2 & Environment Update (Right Half) ---
+  // --- Energy Orbs Logic ---
+  // ==========================================
+  for (let orb of energyOrbs) {
+    if (!isTransitioning) {
+      orb.update();
+
+      // 1. P1 拾取能源球 (推进任务进度)
+      if (dist(orb.x, orb.y, pos.x, pos.y) < orb.size / 2 + 15) {
+        energyProgress = min(100, energyProgress + 20); // 每次收集增加 20%
+        spawnExplosion(orb.x, orb.y, color(50, 255, 100), 20);
+        orb.reset();
+      }
+    }
+    orb.draw();
+  }
+
+  // ==========================================
+  // --- Meteorites Logic ---
   // ==========================================
   for (let m of meteorites) {
-    m.update();
+    if (!isTransitioning) {
+      m.update();
+      if (dist(m.x, m.y, pos.x, pos.y) < m.size / 2 + 15) {
+        p1Health -= 15;
+        triggerShake(15);
+        spawnExplosion(pos.x, pos.y, color(255, 150, 50), 30);
+        if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) explosionSound.play();
+        m.reset();
+      }
+    }
     m.draw();
   }
 
-  p2Ship.update(p2Hand); // Pass the assigned right-hand data to Player 2
+  // ==========================================
+  // --- Player 2 Update & Laser collisions ---
+  // ==========================================
+  if (!isTransitioning) {
+    p2Ship.update(p2Hand); // Pass the assigned right-hand data to Player 2
+    for (let i = p2Ship.lasers.length - 1; i >= 0; i--) {
+      let laser = p2Ship.lasers[i];
+      let laserHit = false;
+
+      // Laser hits Energy Orb
+      for (let orb of energyOrbs) {
+        if (dist(laser.x, laser.y, orb.x, orb.y) < orb.size) {
+          spawnExplosion(orb.x, orb.y, color(255, 255, 50), 50);
+          triggerShake(25);
+          if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) explosionSound.play();
+
+          // Collateral damage to P1
+          if (dist(orb.x, orb.y, pos.x, pos.y) < 150) {
+            p1Health -= 30;
+            spawnExplosion(pos.x, pos.y, color(255, 50, 50), 30);
+          }
+
+          orb.reset();
+          laserHit = true;
+          break;
+        }
+      }
+
+      // Laser hits P1 rocket directly
+      if (!laserHit && dist(laser.x, laser.y, pos.x, pos.y) < 35) {
+        p1Health -= 10;
+        triggerShake(8);
+        spawnExplosion(laser.x, laser.y, color(255, 50, 50), 15);
+        if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) explosionSound.play();
+        laserHit = true;
+      }
+
+      if (laserHit) {
+        p2Ship.lasers.splice(i, 1);
+      }
+    }
+  }
   p2Ship.draw();
 
-  // Collision detection between P2 lasers and P1 rocket
-  for (let i = p2Ship.lasers.length - 1; i >= 0; i--) {
-    let laser = p2Ship.lasers[i];
-    // Check distance between laser line and player 1 center
-    if (dist(laser.x, laser.y, pos.x, pos.y) < 35) {
-      p1Health -= 10;
-      p2Ship.lasers.splice(i, 1); // remove laser on hit
+  // ==========================================
+  // --- Particles & Death Check ---
+  // ==========================================
+  for (let i = particles.length - 1; i >= 0; i--) {
+    particles[i].update();
+    particles[i].draw();
+    if (particles[i].isDead()) {
+      particles.splice(i, 1);
     }
   }
 
-  // Collision detection between Meteorites and P1 rocket
-  for (let m of meteorites) {
-    if (dist(m.x, m.y, pos.x, pos.y) < m.size / 2 + 15) {
-      p1Health -= 5; // Meteorite damage can be adjusted
-      explosionSound.play(); // Play explosion sound
-      m.reset(); // Reset meteorite after impact
-    }
+  if (p1Health <= 0 && !isTransitioning) {
+    push();
+    fill(255, 0, 0, 150);
+    rect(-width, -height, width * 3, height * 3); // Large rect for screen shake
+    pop();
+    spawnExplosion(pos.x, pos.y, color(255, 200, 0), 100);
+    triggerShake(30);
+    respawnPlayer1();
   }
 
   // Draw players
   handleEdges();
-  drawRocket(pos.x, pos.y, angle, vel.mag() > 0.5);
+  drawRocket(pos.x, pos.y, angle, vel.mag() > 0.5 && !isTransitioning);
+
+  pop(); // END MAIN SCREEN SHAKE PUSH
   drawUI();
 }
 
@@ -311,6 +483,18 @@ function gotHands(results) {
 
 // Draw the rocket at (x, y) with rotation a.
 function drawRocket(x, y, a, isThrusting) {
+  if (p1Trail.length > 2) {
+    push();
+    noFill();
+    for (let i = 0; i < p1Trail.length - 1; i++) {
+      let alpha = map(i, 0, p1Trail.length, 0, 150);
+      stroke(0, 200, 255, alpha);
+      strokeWeight(map(i, 0, p1Trail.length, 1, 6));
+      line(p1Trail[i].x, p1Trail[i].y, p1Trail[i + 1].x, p1Trail[i + 1].y);
+    }
+    pop();
+  }
+
   push();
   translate(x, y);
   rotate(a);
@@ -342,101 +526,180 @@ function drawRocket(x, y, a, isThrusting) {
 
 // HUD: speed meter + direction compass (bottom-left corner).
 function drawUI() {
-  const panelX = 20;
-  const panelY = height - 170;
-  const panelW = 160;
-  const panelH = 150;
+  // 顶部全局状态栏
+  push();
+  fill(0, 0, 0, 180);
+  noStroke();
+  rect(0, 0, width, 40);
+
+  fill(0, 200, 255);
+  textSize(16);
+  textAlign(CENTER, CENTER);
+  textStyle(BOLD);
+  text("ISD 60504 - SPATIAL COMBAT", width / 2, 20);
+  pop();
+
+  // ------------------------------------------------
+  // 顶部中央清洁能源进度条
+  // ------------------------------------------------
+  const topBarW = 300;
+  const topBarH = 14;
+  const topBarX = width / 2 - topBarW / 2;
+  const topBarY = 55;
 
   push();
+  fill(0, 0, 0, 150);
+  stroke(0, 255, 150, 100);
+  strokeWeight(1);
+  rect(topBarX, topBarY, topBarW, topBarH, 6);
 
-  // Panel background
+  noStroke();
+  fill(0, 255, 150);
+  rect(topBarX, topBarY, topBarW * (energyProgress / 100), topBarH, 6);
+
+  fill(255);
+  textSize(12);
+  textAlign(CENTER, CENTER);
+  text("CLEAN ENERGY COLLECTED: " + energyProgress + "%", width / 2, topBarY + topBarH / 2 + 1);
+  pop();
+
+  // 任务成功高亮反馈
+  if (energyProgress >= 100) {
+    push();
+    textAlign(CENTER, CENTER);
+    textStyle(BOLD);
+    let alpha = map(sin(frameCount * 0.2), -1, 1, 100, 255);
+
+    textSize(48);
+    fill(0, 255, 150, alpha);
+    text("MISSION SUCCESS", width / 2, height / 2 - 50);
+
+    textSize(20);
+    fill(255, alpha);
+    text("CLEAN ENERGY AT 100% CAPACITY", width / 2, height / 2 + 10);
+    pop();
+  }
+
+  // --- Player 1 Panel ---
+  const panelW = 180;
+  const panelH = 150;
+  const p1PanelX = 20;
+  const p1PanelY = height - 170;
+
+  push();
   noStroke();
   fill(0, 0, 0, 160);
-  rect(panelX, panelY, panelW, panelH, 12);
+  rect(p1PanelX, p1PanelY, panelW, panelH, 12);
 
-  // --- Speed meter ---
   let speed = vel.mag();
   let absoluteMaxSpeed = 2; // 体力MAX時の本当の最高速度
   let currentSpeedRatio = speed / absoluteMaxSpeed;
   let maxPotentialRatio = MAX_SPEED / absoluteMaxSpeed; // ダメージによる上限ライン
 
   fill(160);
-  noStroke();
   textSize(11);
   textAlign(LEFT, TOP);
-  text('SPEED', panelX + 12, panelY + 12);
-
+  text('SPEED', p1PanelX + 12, p1PanelY + 12);
   fill(255);
   textSize(20);
-  text(nf(speed, 1, 1), panelX + 12, panelY + 26);
+  text(nf(speed, 1, 1), p1PanelX + 12, p1PanelY + 26);
 
-  // Player 1 Health Number
   fill(160);
   textSize(11);
-  text('P1 HEALTH', panelX + 80, panelY + 12);
-  fill(p1Health > 30 ? 255 : color(255, 50, 50));
+  text('INTEGRITY', p1PanelX + 90, p1PanelY + 12);
+  fill(p1Health > 30 ? color(0, 200, 255) : color(255, 50, 50));
   textSize(20);
-  text(max(0, p1Health) + '%', panelX + 80, panelY + 26);
+  text(max(0, p1Health) + '%', p1PanelX + 90, p1PanelY + 26);
 
   // Bar track for total possible speed
-  fill(40); // 根本的な背景
-  rect(panelX + 12, panelY + 52, panelW - 24, 10, 5);
+  fill(40);
+  rect(p1PanelX + 12, p1PanelY + 52, panelW - 24, 10, 5);
 
   // ダメージによって到達不能になった部分を赤黒く可視化
   if (maxPotentialRatio < 1.0) {
     fill(80, 20, 20); // 暗めの赤
     let lostWidth = (panelW - 24) * (1.0 - maxPotentialRatio);
-    let startX = (panelX + 12) + (panelW - 24) * maxPotentialRatio;
-    rect(startX, panelY + 52, lostWidth, 10, 5);
+    let startX = (p1PanelX + 12) + (panelW - 24) * maxPotentialRatio;
+    rect(startX, p1PanelY + 52, lostWidth, 10, 5);
   }
 
   // Bar fill — green → red with speed (現在のスピードバー)
   let barColor = lerpColor(color(0, 220, 120), color(255, 60, 60), currentSpeedRatio);
   fill(barColor);
-  rect(panelX + 12, panelY + 52, (panelW - 24) * currentSpeedRatio, 10, 5);
+  rect(p1PanelX + 12, p1PanelY + 52, (panelW - 24) * currentSpeedRatio, 10, 5);
 
-  // --- Direction compass ---
-  let cx = panelX + panelW / 2;
-  let cy = panelY + 112;
-  let r = 28;
+  // Direction compass
+  let cx1 = p1PanelX + panelW / 2;
+  let cy1 = p1PanelY + 112;
+  let r = 24;
 
-  // Compass ring
   stroke(80);
   strokeWeight(1.5);
   noFill();
-  circle(cx, cy, r * 2);
+  circle(cx1, cy1, r * 2);
 
-  // Cardinal labels
-  fill(120);
-  noStroke();
-  textSize(9);
-  textAlign(CENTER, CENTER);
-  text('N', cx, cy - r - 8);
-  text('E', cx + r + 8, cy);
-  text('S', cx, cy + r + 8);
-  text('W', cx - r - 8, cy);
-
-  // Direction arrow (thrust heading = angle - HALF_PI)
   let dir = angle - HALF_PI;
-  let ax = cx + cos(dir) * r * 0.75;
-  let ay = cy + sin(dir) * r * 0.75;
+  let ax = cx1 + cos(dir) * r * 0.75;
+  let ay = cy1 + sin(dir) * r * 0.75;
 
   stroke(0, 200, 255);
   strokeWeight(2);
-  line(cx, cy, ax, ay);
+  line(cx1, cy1, ax, ay);
 
+  push();
   fill(0, 200, 255);
   noStroke();
-  push();
   translate(ax, ay);
   rotate(dir);
   triangle(0, -5, -3, 4, 3, 4);
   pop();
 
-  // Center dot
   fill(255);
   noStroke();
-  circle(cx, cy, 4);
+  circle(cx1, cy1, 4);
+  pop();
 
+  // --- Player 2 Panel ---
+  const p2PanelX = width - 20 - panelW;
+  const p2PanelY = height - 170;
+
+  push();
+  noStroke();
+  fill(0, 0, 0, 160);
+  rect(p2PanelX, p2PanelY, panelW, panelH, 12);
+
+  fill(160);
+  textSize(11);
+  textAlign(LEFT, TOP);
+  text('WEAPONS', p2PanelX + 12, p2PanelY + 12);
+
+  let isReady = p2Ship && p2Ship.fireCooldown <= 0;
+  fill(isReady ? color(150, 255, 150) : color(255, 100, 100));
+  textSize(20);
+  text(isReady ? "READY" : "COOL", p2PanelX + 12, p2PanelY + 26);
+
+  fill(160);
+  textSize(11);
+  text('ACTIVE LASERS', p2PanelX + 90, p2PanelY + 12);
+  fill(255);
+  textSize(20);
+  text(p2Ship ? p2Ship.lasers.length : 0, p2PanelX + 90, p2PanelY + 26);
+
+  fill(40);
+  rect(p2PanelX + 12, p2PanelY + 52, panelW - 24, 8, 4);
+
+  let coolRatio = p2Ship ? map(p2Ship.fireCooldown, 15, 0, 0, 1, true) : 1;
+  fill(150, 255, 150);
+  rect(p2PanelX + 12, p2PanelY + 52, (panelW - 24) * coolRatio, 8, 4);
+
+  let cx2 = p2PanelX + panelW / 2;
+  let cy2 = p2PanelY + 112;
+
+  stroke(isReady ? color(150, 255, 150) : color(255, 50, 50));
+  strokeWeight(1.5);
+  noFill();
+  circle(cx2, cy2, r * 1.5);
+  line(cx2 - r, cy2, cx2 + r, cy2);
+  line(cx2, cy2 - r, cx2, cy2 + r);
   pop();
 }

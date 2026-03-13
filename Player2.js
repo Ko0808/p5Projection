@@ -1,6 +1,5 @@
 class Player2Ship {
     constructor() {
-        // UFO fixed at the right edge of the screen
         this.x = width - 230;
         this.y = height / 2;
         this.size = 60;
@@ -14,9 +13,7 @@ class Player2Ship {
             let indexTip = getMappedPoint(hand.index_finger_tip);
             let thumbTip = getMappedPoint(hand.thumb_tip);
 
-            // [Minimalist Movement] Follows only the Y-axis (up and down), extremely smooth and stable
-            // Lowered lerp value (0.2 -> 0.05) to make the UFO move slower for better game balance
-            this.y = lerp(this.y, wrist.y, 0.1);
+            this.y = lerp(this.y, wrist.y, 0.2);
             this.y = constrain(this.y, this.size / 2, height - this.size / 2);
 
             if (typeof isFlipped !== 'undefined' && isFlipped) {
@@ -25,15 +22,13 @@ class Player2Ship {
                 this.x = lerp(this.x, width - 230, 0.1);
             }
 
-            // [Minimalist Firing] Pinch fingers to fire
             let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
             if (d < 40 && this.fireCooldown <= 0) {
                 this.fire();
-                this.fireCooldown = 30;
+                this.fireCooldown = 15;
             }
         }
 
-        // Cooldown and laser updates
         if (this.fireCooldown > 0) this.fireCooldown--;
 
         for (let i = this.lasers.length - 1; i >= 0; i--) {
@@ -57,10 +52,9 @@ class Player2Ship {
     }
 
     fire() {
-        // No direction needed, directly spawn laser at current position
         this.lasers.push(new Laser(this.x, this.y));
         if (typeof laserSound !== 'undefined' && laserSound.isLoaded()) {
-            laserSound.play(); // Play laser sound effect
+            laserSound.play();
         }
     }
 }
@@ -72,7 +66,7 @@ class Laser {
         if (typeof isFlipped !== 'undefined' && isFlipped) {
             this.speedX = 15;
         } else {
-            this.speedX = -15; // [Minimalist Trajectory] Always fly straight to the left!
+            this.speedX = -15;
         }
     }
 
@@ -82,11 +76,13 @@ class Laser {
 
     draw() {
         push();
-        stroke(255, 50, 50);
-        strokeWeight(6);
-        // Draw a simple horizontal laser line
+        stroke(255, 100, 100, 100);
+        strokeWeight(12);
         let tailLength = (this.speedX > 0) ? -30 : 30;
-        line(this.x, this.y, this.x + tailLength, this.y);
+        line(this.x, this.y, this.x - tailLength, this.y);
+        stroke(255, 50, 50);
+        strokeWeight(4);
+        line(this.x, this.y, this.x - tailLength, this.y);
         pop();
     }
 
@@ -94,45 +90,132 @@ class Laser {
         if (typeof isFlipped !== 'undefined' && isFlipped) {
             return this.x > width;
         }
-        return this.x < 0; // Destroy when flying out of the left side of the screen
+        return this.x < 0;
     }
 }
 
 class Meteorite {
     constructor() {
+        this.trail = [];
         this.reset();
     }
 
     reset() {
         if (typeof isFlipped !== 'undefined' && isFlipped) {
             this.x = -random(50, 600);
-            this.speed = -random(1, 2.3);
+            this.speed = -random(2.5, 5.0);
         } else {
             this.x = width + random(50, 600);
-            this.speed = random(1, 2.3);
+            this.speed = random(2.5, 5.0);
         }
         this.y = random(50, height - 50);
-        this.size = random(20, 45);
+        this.size = random(25, 50);
+        this.trail = [];
     }
 
     update() {
         this.x -= this.speed;
+
+        this.trail.push(createVector(this.x, this.y));
+        if (this.trail.length > 10) this.trail.shift();
+
         if (typeof isFlipped !== 'undefined' && isFlipped) {
-            if (this.x > width + this.size) {
-                this.reset();
-            }
+            if (this.x > width + this.size) this.reset();
         } else {
-            if (this.x < -this.size) {
-                this.reset();
+            if (this.x < -this.size) this.reset();
+        }
+    }
+
+    draw() {
+        if (this.trail.length > 2) {
+            push();
+            noFill();
+            for (let i = 0; i < this.trail.length - 1; i++) {
+                let alpha = map(i, 0, this.trail.length, 0, 100);
+                stroke(100, 100, 100, alpha);
+                strokeWeight(this.size * map(i, 0, this.trail.length, 0.2, 0.8));
+                line(this.trail[i].x, this.trail[i].y, this.trail[i + 1].x, this.trail[i + 1].y);
             }
+            pop();
+        }
+
+        push();
+        fill(100);
+        noStroke();
+        ellipse(this.x, this.y, this.size, this.size * 0.8);
+        fill(70);
+        ellipse(this.x - this.size * 0.1, this.y + this.size * 0.1, this.size * 0.4, this.size * 0.3);
+        pop();
+    }
+}
+
+class EnergyOrb {
+    constructor() {
+        this.reset();
+    }
+
+    reset() {
+        if (typeof isFlipped !== 'undefined' && isFlipped) {
+            this.x = -random(200, 1000);
+            this.speed = -random(1.5, 3.0);
+        } else {
+            this.x = width + random(200, 1000);
+            this.speed = random(1.5, 3.0);
+        }
+        this.y = random(80, height - 80);
+        this.size = 35;
+        this.pulse = random(TWO_PI);
+    }
+
+    update() {
+        this.x -= this.speed;
+        this.pulse += 0.1;
+        this.y += sin(this.pulse) * 1.5;
+
+        if (typeof isFlipped !== 'undefined' && isFlipped) {
+            if (this.x > width + this.size) this.reset();
+        } else {
+            if (this.x < -this.size) this.reset();
         }
     }
 
     draw() {
         push();
-        fill(100);
+        let glow = map(sin(this.pulse), -1, 1, 80, 200);
+
+        fill(50, 255, 100, glow * 0.3);
         noStroke();
-        ellipse(this.x, this.y, this.size, this.size * 0.8);
+        circle(this.x, this.y, this.size * 1.8);
+
+        fill(50, 255, 100, glow);
+        circle(this.x, this.y, this.size);
+
+        fill(255);
+        circle(this.x, this.y, this.size * 0.4);
         pop();
+    }
+}
+
+class Particle {
+    constructor(x, y, col) {
+        this.pos = createVector(x, y);
+        this.vel = p5.Vector.random2D().mult(random(2, 8));
+        this.life = 255;
+        this.color = col;
+        this.size = random(2, 6);
+    }
+    update() {
+        this.pos.add(this.vel);
+        this.life -= 15;
+    }
+    draw() {
+        push();
+        noStroke();
+        fill(red(this.color), green(this.color), blue(this.color), this.life);
+        circle(this.pos.x, this.pos.y, this.size);
+        pop();
+    }
+    isDead() {
+        return this.life <= 0;
     }
 }
