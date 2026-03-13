@@ -187,58 +187,49 @@ function draw() {
       if (orbitAngle < 0) orbitAngle += TWO_PI;
       orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
     } else if (isFlipped && pos.x < 100) {
-      // Trigger orbit around LEFT orb
-      isTransitioning = true;
-      let centerX = -100;
-      let centerY = height / 2;
-      orbitRadius = dist(pos.x, pos.y, centerX, centerY);
-      orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
-      if (orbitAngle < 0) orbitAngle += TWO_PI;
-      orbitTargetAngle = orbitAngle - TWO_PI; // Orbit full circle (counter-moth)
+      // 一気にリセット (アニメーションなし)
+      isFlipped = false;
+      pos.x = 150;
+      pos.y = height / 2;
+      angle = HALF_PI; // Face entirely right
+      vel.set(0, 0);
+      p1Health = 100; // HP回復
+      for (let m of meteorites) {
+        m.reset();
+      }
     }
   } else {
-    // Orbit Animation
-    let centerX = (!isFlipped) ? width + 170 : -100;
+    // =====================================
+    // ▼ ここからが円を回る「Orbit Animation」
+    // =====================================
+    // Rotation logic relies purely on the P1 side (Right orb)
+    let centerX = width + 170;
     let centerY = height / 2;
 
-    // Rotate in direction based on whether we are moving left or right
-    if (!isFlipped) {
-      orbitAngle += 0.05;
-    } else {
-      orbitAngle -= 0.05;
-    }
+    orbitAngle += 0.05;
 
+    // 三角関数（cos と sin）を使って、中心点からの円周上の座標を計算
     pos.x = centerX + cos(orbitAngle) * orbitRadius;
     pos.y = centerY + sin(orbitAngle) * orbitRadius;
 
     // Point tangentially based on orbit direction
-    if (!isFlipped) {
-      angle = orbitAngle + HALF_PI;
-    } else {
-      angle = orbitAngle - HALF_PI;
-    }
+    // ロケットの機首（0度=上）を円の進行方向（時計回りの接線方向）へ向ける
+    angle = orbitAngle + Math.PI;
 
     // Check completion condition
-    let finishedTrans = (!isFlipped) ? (orbitAngle >= orbitTargetAngle) : (orbitAngle <= orbitTargetAngle);
+    let finishedTrans = (orbitAngle >= orbitTargetAngle);
 
     if (finishedTrans) {
+      // 1周終わったらフラグを戻し、シーンを切り替える
       isTransitioning = false;
-      isFlipped = !isFlipped; // 反転（true -> false, false -> true）
+      isFlipped = true;
 
       // Position after orbit completion
-      if (isFlipped) {
-        // Just flipped to P2 side
-        pos.x = width - 150;
-        pos.y = height / 2;
-        angle = PI + HALF_PI; // Face entirely left
-      } else {
-        // Flipped back to normal (P1 side)
-        pos.x = 150;
-        pos.y = height / 2;
-        angle = HALF_PI; // Face entirely right
-      }
-
+      pos.x = width - 150;
+      pos.y = height / 2;
+      angle = PI + HALF_PI; // Face entirely left
       vel.set(0, 0);
+      p1Health = 100; // HP回復
 
       for (let m of meteorites) {
         m.reset();
