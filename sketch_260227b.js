@@ -3,8 +3,14 @@ let handPose;
 let video;
 let hands = [];
 
+// --- sounds ---
+let bgmSound;
+let explosionSound;
+let laserSound;
+
 // --- player 2 & state ---
 let p2Ship;
+let meteorites = [];
 let p1Health = 100;
 
 // --- rocket state ---
@@ -15,11 +21,14 @@ let angle = 90;
 
 // --- physics constants ---
 const FRICTION = 0.95;
-const POWER = 0.4;
-const MAX_SPEED = 8;
+const POWER = 0.1;
+const MAX_SPEED = 2;
 
 function preload() {
   handPose = ml5.handPose();
+  bgmSound = loadSound('SoundEffect/bgm.mp3');
+  explosionSound = loadSound('SoundEffect/explosion.mp3');
+  laserSound = loadSound('SoundEffect/lazer.mp3');
 }
 
 function setup() {
@@ -31,16 +40,39 @@ function setup() {
 
   handPose.detectStart(video, gotHands);
 
-  pos = createVector(0, height / 2);
+  pos = createVector(width / 4, height / 2);
   vel = createVector(0, 0);
   accel = createVector(0, 0);
 
   // Init player 2 ship
   p2Ship = new Player2Ship();
+
+  for (let i = 0; i < 4; i++) {
+    meteorites.push(new Meteorite());
+  }
+
+  frameRate(30); // Stable frame rate, dual-hand gesture recognition is computationally expensive
+}
+
+// Ensure audio starts on first user interaction if blocked by browser
+function mousePressed() {
+  userStartAudio();
+  if (!bgmSound.isPlaying()) {
+    bgmSound.setLoop(true); // 明示的にループ再生を維持するよう設定
+    bgmSound.loop();
+  }
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+}
+
+// Core helper function: Maps the raw camera coordinates to our mirrored canvas
+function getMappedPoint(keypoint) {
+  // Note that width and 0 are flipped here to match the mirrored effect of scale(-1, 1)
+  let mx = map(keypoint.x, 0, video.width, width, 0);
+  let my = map(keypoint.y, 0, video.height, 0, height);
+  return createVector(mx, my);
 }
 
 function draw() {
@@ -56,24 +88,47 @@ function draw() {
   drawingContext.globalAlpha = 1.0;
   pop();
 
-  if (hands.length > 0) {
-    let hand = hands[0];
+  // ==========================================
+  // --- Screen Divider ---
+  // ==========================================
+  push();
+  stroke(0, 200, 255, 150);
+  strokeWeight(2);
+  drawingContext.setLineDash([15, 15]); // Dashed line effect
+  line(width / 2, 0, width / 2, height);
+  pop();
 
-    // Compute target angle from wrist → middle finger MCP.
-    // +PI offsets so the rocket direction is 90° from the hand orientation.
-    let wrist = hand.wrist;
-    let middle = hand.middle_finger_mcp;
+  // ==========================================
+  // --- Hand Separation and Assignment Logic ---
+  // ==========================================
+  let p1Hand = null;
+  let p2Hand = null;
+
+  for (let hand of hands) {
+    let mappedWrist = getMappedPoint(hand.wrist);
+    // Determine if the hand is on the left or right side of the screen
+    if (mappedWrist.x < width / 2) {
+      p1Hand = hand;
+    } else {
+      p2Hand = hand;
+    }
+  }
+
+  // ==========================================
+  // --- Player 1 Logic (Left Half) ---
+  // ==========================================
+  if (p1Hand) {
+    let wrist = getMappedPoint(p1Hand.wrist);
+    let middle = getMappedPoint(p1Hand.middle_finger_mcp);
+    let indexTip = getMappedPoint(p1Hand.index_finger_tip);
+    let thumbTip = getMappedPoint(p1Hand.thumb_tip);
+
     let targetAngle = atan2(middle.y - wrist.y, middle.x - wrist.x) + PI;
     angle = lerpAngle(angle, targetAngle, 0.15);
 
-    // Use index-thumb spread (px) to modulate thrust power.
-    let d = dist(
-      hand.index_finger_tip.x, hand.index_finger_tip.y,
-      hand.thumb_tip.x, hand.thumb_tip.y
-    );
+    let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
 
-    if (d > 40) {
-      // Map spread (40–150 px) to power (0.1 – POWER×2.5), clamped.
+    if (d > 40) { // Open fingers -> Thrust
       let dynamicPower = map(d, 40, 150, 0.1, POWER * 2.5, true);
       let force = p5.Vector.fromAngle(angle - HALF_PI);
       force.mult(dynamicPower);
@@ -88,8 +143,15 @@ function draw() {
   pos.add(vel);
   accel.mult(0);
 
-  // Update and draw Player 2
-  p2Ship.update();
+  // ==========================================
+  // --- Player 2 & Environment Update (Right Half) ---
+  // ==========================================
+  for (let m of meteorites) {
+    m.update();
+    m.draw();
+  }
+
+  p2Ship.update(p2Hand); // Pass the assigned right-hand data to Player 2
   p2Ship.draw();
 
   // Collision detection between P2 lasers and P1 rocket
@@ -102,13 +164,23 @@ function draw() {
     }
   }
 
+  // Collision detection between Meteorites and P1 rocket
+  for (let m of meteorites) {
+    if (dist(m.x, m.y, pos.x, pos.y) < m.size / 2 + 15) {
+      p1Health -= 5; // Meteorite damage can be adjusted
+      explosionSound.play(); // Play explosion sound
+      m.reset(); // Reset meteorite after impact
+    }
+  }
+
   // Draw players
   handleEdges();
   drawRocket(pos.x, pos.y, angle, vel.mag() > 0.5);
   drawUI();
 }
 
-// Wrap rocket position at canvas edges.
+// Boundary handling: When the rocket reaches the edges, it loops to the opposite side
+// It can cross the screen divider and move to the other side.
 function handleEdges() {
   if (pos.x > width) pos.x = 0;
   if (pos.x < 0) pos.x = width;
@@ -250,10 +322,4 @@ function drawUI() {
   circle(cx, cy, 4);
 
   pop();
-}
-
-function mousePressed() {
-  if (mouseButton === LEFT && p2Ship) {
-    p2Ship.fire();
-  }
 }
