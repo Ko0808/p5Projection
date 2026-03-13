@@ -51,7 +51,7 @@ function setup() {
     meteorites.push(new Meteorite());
   }
 
-  frameRate(30); // 稳定帧率，双人手势识别比较吃性能
+  frameRate(30); // Stable frame rate, dual-hand gesture recognition is computationally expensive
 }
 
 // Ensure audio starts on first user interaction if blocked by browser
@@ -67,9 +67,9 @@ function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
 
-// 核心辅助函数：将摄像头的原始坐标映射到我们镜像翻转后的画布上
+// Core helper function: Maps the raw camera coordinates to our mirrored canvas
 function getMappedPoint(keypoint) {
-  // 注意这里 width 和 0 是反过来的，为了匹配 scale(-1, 1) 的镜像效果
+  // Note that width and 0 are flipped here to match the mirrored effect of scale(-1, 1)
   let mx = map(keypoint.x, 0, video.width, width, 0);
   let my = map(keypoint.y, 0, video.height, 0, height);
   return createVector(mx, my);
@@ -89,24 +89,24 @@ function draw() {
   pop();
 
   // ==========================================
-  // --- 画面分割线 ---
+  // --- Screen Divider ---
   // ==========================================
   push();
   stroke(0, 200, 255, 150);
   strokeWeight(2);
-  drawingContext.setLineDash([15, 15]); // 虚线效果
+  drawingContext.setLineDash([15, 15]); // Dashed line effect
   line(width / 2, 0, width / 2, height);
   pop();
 
   // ==========================================
-  // --- 双手分离与分配逻辑 ---
+  // --- Hand Separation and Assignment Logic ---
   // ==========================================
   let p1Hand = null;
   let p2Hand = null;
 
   for (let hand of hands) {
     let mappedWrist = getMappedPoint(hand.wrist);
-    // 判断手在屏幕左侧还是右侧
+    // Determine if the hand is on the left or right side of the screen
     if (mappedWrist.x < width / 2) {
       p1Hand = hand;
     } else {
@@ -115,7 +115,7 @@ function draw() {
   }
 
   // ==========================================
-  // --- Player 1 Logic (左半场) ---
+  // --- Player 1 Logic (Left Half) ---
   // ==========================================
   if (p1Hand) {
     let wrist = getMappedPoint(p1Hand.wrist);
@@ -128,7 +128,7 @@ function draw() {
 
     let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
 
-    if (d > 40) { // 张开手指 -> 推进
+    if (d > 40) { // Open fingers -> Thrust
       let dynamicPower = map(d, 40, 150, 0.1, POWER * 2.5, true);
       let force = p5.Vector.fromAngle(angle - HALF_PI);
       force.mult(dynamicPower);
@@ -144,14 +144,14 @@ function draw() {
   accel.mult(0);
 
   // ==========================================
-  // --- Player 2 & Environment Update (右半场) ---
+  // --- Player 2 & Environment Update (Right Half) ---
   // ==========================================
   for (let m of meteorites) {
     m.update();
     m.draw();
   }
 
-  p2Ship.update(p2Hand); // 把分好的右手数据传给 Player 2
+  p2Ship.update(p2Hand); // Pass the assigned right-hand data to Player 2
   p2Ship.draw();
 
   // Collision detection between P2 lasers and P1 rocket
@@ -167,9 +167,9 @@ function draw() {
   // Collision detection between Meteorites and P1 rocket
   for (let m of meteorites) {
     if (dist(m.x, m.y, pos.x, pos.y) < m.size / 2 + 15) {
-      p1Health -= 5; // 陨石伤害可以调整
-      explosionSound.play(); // 播放爆炸音效
-      m.reset(); // 撞击后重置陨石
+      p1Health -= 5; // Meteorite damage can be adjusted
+      explosionSound.play(); // Play explosion sound
+      m.reset(); // Reset meteorite after impact
     }
   }
 
@@ -179,8 +179,8 @@ function draw() {
   drawUI();
 }
 
-// 边界处理：ロケットが上下や左右の端に来た場合、反対側にループする
-// 画面の分割線を越えて向こう側へ移動できるようになります。
+// Boundary handling: When the rocket reaches the edges, it loops to the opposite side
+// It can cross the screen divider and move to the other side.
 function handleEdges() {
   if (pos.x > width) pos.x = 0;
   if (pos.x < 0) pos.x = width;
