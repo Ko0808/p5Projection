@@ -27,6 +27,8 @@ let particles = [];
 let shakeMag = 0;
 let stars = [];
 let gridOffset = 0;
+let missionResult = null; // 'SUCCESS' or 'FAILED'
+let missionResultTimer = 0;
 
 // --- scene transition state ---
 let isTransitioning = false;
@@ -67,7 +69,7 @@ function setup() {
     meteorites.push(new Meteorite());
   }
 
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 5; i++) {
     energyOrbs.push(new EnergyOrb());
   }
 
@@ -292,6 +294,12 @@ function draw() {
       if (orbitAngle < 0) orbitAngle += TWO_PI;
       orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
     } else if (isFlipped && pos.x < 100) {
+      if (energyProgress >= 100) {
+        missionResult = 'SUCCESS';
+      } else {
+        missionResult = 'FAILED';
+      }
+      missionResultTimer = 120; // 显示4秒
       respawnPlayer1();
     }
   } else {
@@ -329,7 +337,6 @@ function draw() {
       angle = PI + HALF_PI; // Face entirely left
       vel.set(0, 0);
       p1Health = 100; // HP回復
-      energyProgress = 0; // 重生时清零能量进度，增加惩罚感
       p1Trail = [];
 
       for (let m of meteorites) {
@@ -344,18 +351,20 @@ function draw() {
   // ==========================================
   // --- Energy Orbs Logic ---
   // ==========================================
-  for (let orb of energyOrbs) {
-    if (!isTransitioning) {
-      orb.update();
+  if (!isFlipped) {
+    for (let orb of energyOrbs) {
+      if (!isTransitioning) {
+        orb.update();
 
-      // 1. P1 拾取能源球 (推进任务进度)
-      if (dist(orb.x, orb.y, pos.x, pos.y) < orb.size / 2 + 15) {
-        energyProgress = min(100, energyProgress + 20); // 每次收集增加 20%
-        spawnExplosion(orb.x, orb.y, color(50, 255, 100), 20);
-        orb.reset();
+        // 1. P1 拾取能源球 (推进任务进度)
+        if (dist(orb.x, orb.y, pos.x, pos.y) < orb.size / 2 + 15) {
+          energyProgress = min(100, energyProgress + 50); // 每次收集增加 50%
+          spawnExplosion(orb.x, orb.y, color(50, 255, 100), 20);
+          orb.reset();
+        }
       }
+      orb.draw();
     }
-    orb.draw();
   }
 
   // ==========================================
@@ -384,22 +393,24 @@ function draw() {
       let laser = p2Ship.lasers[i];
       let laserHit = false;
 
-      // Laser hits Energy Orb
-      for (let orb of energyOrbs) {
-        if (dist(laser.x, laser.y, orb.x, orb.y) < orb.size) {
-          spawnExplosion(orb.x, orb.y, color(255, 255, 50), 50);
-          triggerShake(25);
-          if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) explosionSound.play();
+      // Laser hits Energy Orb (Only in Phase 1)
+      if (!isFlipped) {
+        for (let orb of energyOrbs) {
+          if (dist(laser.x, laser.y, orb.x, orb.y) < orb.size) {
+            spawnExplosion(orb.x, orb.y, color(255, 255, 50), 50);
+            triggerShake(25);
+            if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) explosionSound.play();
 
-          // Collateral damage to P1
-          if (dist(orb.x, orb.y, pos.x, pos.y) < 150) {
-            p1Health -= 30;
-            spawnExplosion(pos.x, pos.y, color(255, 50, 50), 30);
+            // Collateral damage to P1
+            if (dist(orb.x, orb.y, pos.x, pos.y) < 150) {
+              p1Health -= 30;
+              spawnExplosion(pos.x, pos.y, color(255, 50, 50), 30);
+            }
+
+            orb.reset();
+            laserHit = true;
+            break;
           }
-
-          orb.reset();
-          laserHit = true;
-          break;
         }
       }
 
@@ -443,6 +454,10 @@ function draw() {
   // Draw players
   handleEdges();
   drawRocket(pos.x, pos.y, angle, vel.mag() > 0.5 && !isTransitioning);
+
+  if (missionResultTimer > 0) {
+    missionResultTimer--;
+  }
 
   pop(); // END MAIN SCREEN SHAKE PUSH
   drawUI();
@@ -563,20 +578,27 @@ function drawUI() {
   text("CLEAN ENERGY COLLECTED: " + energyProgress + "%", width / 2, topBarY + topBarH / 2 + 1);
   pop();
 
-  // 任务成功高亮反馈
-  if (energyProgress >= 100) {
+  // 任务成功/失败高亮反馈
+  if (missionResultTimer > 0) {
     push();
     textAlign(CENTER, CENTER);
     textStyle(BOLD);
     let alpha = map(sin(frameCount * 0.2), -1, 1, 100, 255);
 
     textSize(48);
-    fill(0, 255, 150, alpha);
-    text("MISSION SUCCESS", width / 2, height / 2 - 50);
-
-    textSize(20);
-    fill(255, alpha);
-    text("CLEAN ENERGY AT 100% CAPACITY", width / 2, height / 2 + 10);
+    if (missionResult === 'SUCCESS') {
+      fill(0, 255, 150, alpha);
+      text("MISSION SUCCESS", width / 2, height / 2 - 50);
+      textSize(20);
+      fill(255, alpha);
+      text("CLEAN ENERGY AT 100% CAPACITY", width / 2, height / 2 + 10);
+    } else {
+      fill(255, 50, 50, alpha);
+      text("MISSION FAILED", width / 2, height / 2 - 50);
+      textSize(20);
+      fill(255, alpha);
+      text("NOT ENOUGH CLEAN ENERGY RETURNED", width / 2, height / 2 + 10);
+    }
     pop();
   }
 
