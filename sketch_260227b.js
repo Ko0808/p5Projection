@@ -8,6 +8,11 @@ let bgmSound;
 let explosionSound;
 let laserSound;
 
+// --- textures ---
+let moonTexture;
+let earthTexture;
+let backgroundTexture;
+
 // --- player 2 & state ---
 let p2Ship;
 let meteorites = [];
@@ -41,14 +46,17 @@ let orbitTargetAngle = 0;
 
 // --- physics constants ---
 const FRICTION = 0.95;
-const POWER = 0.2;
-let MAX_SPEED = 2; // Will be updated dynamically in draw()
+const POWER = 0.3;
+let MAX_SPEED = 4; // Will be updated dynamically in draw()
 
 function preload() {
   handPose = ml5.handPose();
   bgmSound = loadSound('SoundEffect/bgm.mp3');
   explosionSound = loadSound('SoundEffect/explosion.mp3');
   laserSound = loadSound('SoundEffect/lazer.mp3');
+  moonTexture = loadImage('image/moon.png');
+  earthTexture = loadImage('image/earth.png');
+  backgroundTexture = loadImage('image/background.jpeg');
 }
 
 function setup() {
@@ -180,7 +188,11 @@ function draw() {
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
   MAX_SPEED = 2 * max(0.5, p1Health / 100);
 
-  background(5, 10, 25);
+  if (backgroundTexture) {
+    image(backgroundTexture, 0, 0, width, height);
+  } else {
+    background(5, 10, 25);
+  }
 
   push(); // MAIN SCREEN SHAKE PUSH
   if (shakeMag > 0.1) {
@@ -215,21 +227,48 @@ function draw() {
   // --- Edge Decorative Orbs ---
   // ==========================================
   push();
-  noStroke();
   if (isFlipped) {
-    // Left side orb is now P2 zone (greenish)
-    fill(150, 255, 150, 30);
-    ellipse(0, height / 2, width * 0.2, height * 0.4);
-    // Right side orb is now P1 zone (blueish)
-    fill(0, 150, 255, 30);
-    ellipse(width, height / 2, width * 0.2, height * 0.4);
+    // Left side orb is now P2 zone (moon texture)
+    if (moonTexture) {
+      imageMode(CENTER);
+      image(earthTexture, 0, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(150, 255, 150, 30);
+      ellipse(0, height / 2, width * 0.2, height * 0.4);
+    }
+    // Right side orb is now P1 zone (earth texture)
+    if (earthTexture) {
+      imageMode(CENTER);
+      image(moonTexture, width, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(0, 150, 255, 30);
+      ellipse(width, height / 2, width * 0.2, height * 0.4);
+    }
   } else {
-    // Left side orb (P1 zone) - blueish
-    fill(0, 150, 255, 30);
-    ellipse(0, height / 2, width * 0.2, height * 0.4);
-    // Right side orb (P2 zone) - greenish
-    fill(150, 255, 150, 30);
-    ellipse(width, height / 2, width * 0.2, height * 0.4);
+    // Left side orb (P1 zone) - earth texture
+    if (earthTexture) {
+      imageMode(CENTER);
+      image(earthTexture, 0, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(0, 150, 255, 30);
+      ellipse(0, height / 2, width * 0.2, height * 0.4);
+    }
+    // Right side orb (P2 zone) - moon texture
+    if (moonTexture) {
+      imageMode(CENTER);
+      image(moonTexture, width, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(150, 255, 150, 30);
+      ellipse(width, height / 2, width * 0.2, height * 0.4);
+    }
   }
   pop();
 
@@ -301,12 +340,20 @@ function draw() {
     if (p1Trail.length > 15) p1Trail.shift();
 
     // Check transition trigger (Right -> Left OR Left -> Right)
-    if (!isFlipped && pos.x > width - 100) {
+    // Trigger when rocket gets within 50px of the moon circle
+    let moonCenterX = width;
+    let moonCenterY = height / 2;
+    let moonRadius = width * 0.1;
+    let distToMoon = dist(pos.x, pos.y, moonCenterX, moonCenterY);
+    
+    if (!isFlipped && distToMoon <= moonRadius + 50) {
       // Trigger orbit around RIGHT orb
       isTransitioning = true;
-      let centerX = width + 170;
+      let centerX = width;      // Align with moon texture center
       let centerY = height / 2;
       orbitRadius = dist(pos.x, pos.y, centerX, centerY);
+      // Ensure orbit is outside the circle (moon width * 0.1 = radius, so add 50 to be outside)
+      orbitRadius = max(orbitRadius, width * 0.1 + 50);
       orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
       if (orbitAngle < 0) orbitAngle += TWO_PI;
       orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
@@ -324,7 +371,7 @@ function draw() {
     // ▼ ここからが円を回る「Orbit Animation」
     // =====================================
     // Rotation logic relies purely on the P1 side (Right orb)
-    let centerX = width + 170;
+    let centerX = width;      // Align with moon texture center
     let centerY = height / 2;
 
     orbitAngle += 0.05;
@@ -568,7 +615,7 @@ function drawUI() {
   textSize(16);
   textAlign(CENTER, CENTER);
   textStyle(BOLD);
-  text("ISD 60504 - SPATIAL COMBAT", width / 2, 20);
+  text("ISD 60504 - FLY ME TO THE MOON", width / 2, 20);
   pop();
 
   // ------------------------------------------------
