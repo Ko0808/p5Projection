@@ -3,6 +3,9 @@ let handPose;
 let video;
 let hands = [];
 
+// --- font (WEBGL requires a loaded font for text) ---
+let mainFont;
+
 // --- sounds ---
 let bgmSound;
 let explosionSound;
@@ -44,7 +47,19 @@ const FRICTION = 0.95;
 const POWER = 0.2;
 let MAX_SPEED = 2; // Will be updated dynamically in draw()
 
+// --- p5mapper-like warp controls ---
+let warpCorners = [];
+let activeWarpCorner = -1;
+const CORNER_HANDLE_RADIUS = 12;
+const CORNER_SELECT_DISTANCE = 20;
+let enableWarp = false;
+let isWebGL = true;
+
 function preload() {
+  // Load a font for WEBGL text rendering (required in WEBGL mode)
+  // Using a widely available font file from CDN.
+  mainFont = loadFont('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/webfonts/fa-regular-400.ttf');
+
   handPose = ml5.handPose();
   bgmSound = loadSound('SoundEffect/bgm.mp3');
   explosionSound = loadSound('SoundEffect/explosion.mp3');
@@ -52,7 +67,14 @@ function preload() {
 }
 
 function setup() {
+  // Use 2D mode for more stable rendering with warp feature.
   createCanvas(windowWidth, windowHeight);
+  isWebGL = false;
+
+  // Ensure a font is set regardless of renderer (WEBGL requires loadFont before text())
+  if (mainFont) {
+    textFont(mainFont);
+  }
 
   video = createCapture(VIDEO);
   video.size(640, 480);
@@ -86,6 +108,19 @@ function setup() {
   }
 
   frameRate(30); // Stable frame rate, dual-hand gesture recognition is computationally expensive
+
+  // Initialize warp mapping corners (full screen quad)
+  resetWarpCorners();
+}
+
+function resetWarpCorners() {
+  warpCorners = [
+    createVector(0, 0),
+    createVector(width, 0),
+    createVector(width, height),
+    createVector(0, height)
+  ];
+  console.log('Warp corners reset:', warpCorners);
 }
 
 // ----------------------------------------------------
@@ -108,6 +143,24 @@ function drawGrid() {
   pop();
 }
 
+function drawDashedLine(x1, y1, x2, y2, dashLen = 10, gapLen = 10) {
+  // Simple manual dashed line for WEBGL (drawingContext.setLineDash not available)
+  let d = dist(x1, y1, x2, y2);
+  let steps = floor(d / (dashLen + gapLen));
+  let dx = (x2 - x1) / d;
+  let dy = (y2 - y1) / d;
+
+  for (let i = 0; i < steps; i++) {
+    let start = i * (dashLen + gapLen);
+    let end = start + dashLen;
+    let sx = x1 + dx * start;
+    let sy = y1 + dy * start;
+    let ex = x1 + dx * end;
+    let ey = y1 + dy * end;
+    line(sx, sy, ex, ey);
+  }
+}
+
 function drawStars() {
   push();
   noStroke();
@@ -128,10 +181,44 @@ function mousePressed() {
     bgmSound.setLoop(true);
     bgmSound.loop();
   }
+
+  // Check if the user clicked near a warp corner handle
+  activeWarpCorner = -1;
+  for (let i = 0; i < warpCorners.length; i++) {
+    if (dist(mouseX, mouseY, warpCorners[i].x, warpCorners[i].y) < CORNER_SELECT_DISTANCE) {
+      activeWarpCorner = i;
+      break;
+    }
+  }
+}
+
+function mouseDragged() {
+  if (activeWarpCorner >= 0) {
+    warpCorners[activeWarpCorner].x = constrain(mouseX, 0, width);
+    warpCorners[activeWarpCorner].y = constrain(mouseY, 0, height);
+  }
+}
+
+function mouseReleased() {
+  activeWarpCorner = -1;
+}
+
+function keyPressed() {
+  // 'R' to reset warp to the full screen rectangle
+  if (key === 'r' || key === 'R') {
+    resetWarpCorners();
+  }
+
+  // 'W' to toggle warp on/off (useful if warping causes black screen)
+  if (key === 'w' || key === 'W') {
+    enableWarp = !enableWarp;
+    console.log('Warp toggled:', enableWarp, 'Corners:', warpCorners.length);
+  }
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
+  resetWarpCorners();
 }
 
 // Core helper function: Maps the raw camera coordinates to our mirrored canvas
@@ -207,8 +294,7 @@ function draw() {
   push();
   stroke(0, 200, 255, 150);
   strokeWeight(2);
-  drawingContext.setLineDash([15, 15]); // Dashed line effect
-  line(width / 2, 0, width / 2, height);
+  drawDashedLine(width / 2, 0, width / 2, height, 15, 15);
   pop();
 
   // ==========================================
@@ -478,6 +564,143 @@ function draw() {
 
   pop(); // END MAIN SCREEN SHAKE PUSH
   drawUI();
+
+  // Always draw warp handles (BEFORE applying warp to avoid clipping)
+  if (enableWarp) {
+    console.log('Drawing handles while warp is enabled');
+    drawWarpHandles();
+  }
+
+  // Apply the warp mapping to the full screen (toggle with W)
+  if (enableWarp) {
+    applyWarpMapping2D();
+  }
+}
+
+function applyWarpMapping() {
+  // Capture the current canvas contents
+  let snap;
+  try {
+    snap = get(0, 0, width, height);
+  } catch (e) {
+    // WEBGL get() can fail on some platforms; fallback to no warp
+    console.warn('applyWarpMapping: get() failed, skipping warp', e);
+    return;
+  }
+
+  if (!snap || snap.width === 0 || snap.height === 0) {
+    // Nothing to warp; skip
+    return;
+  }
+
+  // Clear and draw the warped quad using the captured frame as texture
+  clear();
+  push();
+  translate(-width / 2, -height / 2);
+  noStroke();
+  textureMode(IMAGE); // Use pixel coords for texture mapping
+  texture(snap);
+  beginShape();
+  vertex(warpCorners[0].x, warpCorners[0].y, 0, 0);
+  vertex(warpCorners[1].x, warpCorners[1].y, 1, 0);
+  vertex(warpCorners[2].x, warpCorners[2].y, 1, 1);
+  vertex(warpCorners[3].x, warpCorners[3].y, 0, 1);
+  endShape(CLOSE);
+  textureMode(NORMAL);
+  pop();
+
+  // UI for editing the warp corners
+  drawWarpHandles();
+}
+
+function applyWarpMapping2D() {
+  // 2D-safe warp using canvas image data and drawing to a transformed region.
+  // Capture the scene as an image
+  let snap = get(0, 0, width, height);
+
+  if (!snap || snap.width === 0 || snap.height === 0) {
+    return;
+  }
+
+  // Draw the warped image using quadrilateral mapping
+  // This uses a simple bilinear interpolation approach (approximate perspective)
+  push();
+  
+  // Use drawingContext (canvas context) for transform control
+  let ctx = drawingContext;
+  ctx.save();
+
+  // Draw warped quad by computing corner-to-corner mapping
+  // We'll use the canvas primitives to approximate the quad warp
+  let c0 = warpCorners[0];
+  let c1 = warpCorners[1];
+  let c2 = warpCorners[2];
+  let c3 = warpCorners[3];
+
+  // Simple quad warp using canvas clip and transform
+  // (Note: true perspective would need WebGL, but this approximates it for corners)
+  ctx.beginPath();
+  ctx.moveTo(c0.x, c0.y);
+  ctx.lineTo(c1.x, c1.y);
+  ctx.lineTo(c2.x, c2.y);
+  ctx.lineTo(c3.x, c3.y);
+  ctx.closePath();
+  ctx.clip();
+
+  // Now draw the image stretched to corners (simple approach)
+  // Calculate the scaling factors
+  let srcW = snap.width;
+  let srcH = snap.height;
+  let dstX0 = c0.x;
+  let dstY0 = c0.y;
+  let dstX1 = c1.x;
+  let dstY1 = c1.y;
+  let dstX2 = c2.x;
+  let dstY2 = c2.y;
+  let dstX3 = c3.x;
+  let dstY3 = c3.y;
+
+  // Use the original bounds as reference
+  let avgX = (dstX0 + dstX1 + dstX2 + dstX3) / 4;
+  let avgY = (dstY0 + dstY1 + dstY2 + dstY3) / 4;
+  let scaleX = (dist(dstX0, dstY0, dstX1, dstY1) + dist(dstX3, dstY3, dstX2, dstY2)) / (2 * srcW);
+  let scaleY = (dist(dstX0, dstY0, dstX3, dstY3) + dist(dstX1, dstY1, dstX2, dstY2)) / (2 * srcH);
+
+  ctx.translate(avgX, avgY);
+  ctx.scale(scaleX, scaleY);
+  ctx.translate(-width / 2, -height / 2);
+  ctx.drawImage(snap.canvas, 0, 0);
+
+  ctx.restore();
+  pop();
+}
+
+function drawWarpHandles() {
+  push();
+  strokeWeight(2);
+
+  console.log('In drawWarpHandles, warpCorners.length:', warpCorners.length);
+  for (let i = 0; i < warpCorners.length; i++) {
+    const c = warpCorners[i];
+    console.log('Corner', i, ':', c.x, c.y);
+    // Select color based on whether this corner is being dragged
+    let cornerColor = (i === activeWarpCorner) 
+      ? color(255, 150, 50, 220) 
+      : color(255, 100, 100, 180);
+    
+    fill(cornerColor);
+    stroke(255);
+    circle(c.x, c.y, CORNER_HANDLE_RADIUS * 2);
+    
+    // Draw a label to debug
+    noStroke();
+    fill(255);
+    textSize(10);
+    textAlign(CENTER, CENTER);
+    text(i, c.x, c.y);
+  }
+
+  pop();
 }
 
 // Boundary handling: When the rocket reaches the edges, it loops to the opposite side
