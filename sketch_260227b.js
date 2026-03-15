@@ -340,12 +340,20 @@ function draw() {
     if (p1Trail.length > 15) p1Trail.shift();
 
     // Check transition trigger (Right -> Left OR Left -> Right)
-    if (!isFlipped && pos.x > width - 100) {
+    // Trigger when rocket gets within 50px of the moon circle
+    let moonCenterX = width;
+    let moonCenterY = height / 2;
+    let moonRadius = width * 0.1;
+    let distToMoon = dist(pos.x, pos.y, moonCenterX, moonCenterY);
+    
+    if (!isFlipped && distToMoon <= moonRadius + 50) {
       // Trigger orbit around RIGHT orb
       isTransitioning = true;
-      let centerX = width + 170;
+      let centerX = width;      // Align with moon texture center
       let centerY = height / 2;
       orbitRadius = dist(pos.x, pos.y, centerX, centerY);
+      // Ensure orbit is outside the circle (moon width * 0.1 = radius, so add 50 to be outside)
+      orbitRadius = max(orbitRadius, width * 0.1 + 50);
       orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
       if (orbitAngle < 0) orbitAngle += TWO_PI;
       orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
@@ -363,8 +371,8 @@ function draw() {
     // ▼ ここからが円を回る「Orbit Animation」
     // =====================================
     // Rotation logic relies purely on the P1 side (Right orb)
-    let centerX = width + 250;
-    let centerY = height / 3;
+    let centerX = width;      // Align with moon texture center
+    let centerY = height / 2;
 
     orbitAngle += 0.05;
 
