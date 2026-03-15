@@ -8,6 +8,11 @@ let bgmSound;
 let explosionSound;
 let laserSound;
 
+// --- textures ---
+let moonTexture;
+let earthTexture;
+let backgroundTexture;
+
 // --- player 2 & state ---
 let p2Ship;
 let meteorites = [];
@@ -49,6 +54,9 @@ function preload() {
   bgmSound = loadSound('SoundEffect/bgm.mp3');
   explosionSound = loadSound('SoundEffect/explosion.mp3');
   laserSound = loadSound('SoundEffect/lazer.mp3');
+  moonTexture = loadImage('image/moon.jpeg');
+  earthTexture = loadImage('image/earth.jpeg');
+  backgroundTexture = loadImage('image/background.jpeg');
 }
 
 function setup() {
@@ -180,7 +188,11 @@ function draw() {
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
   MAX_SPEED = 2 * max(0.5, p1Health / 100);
 
-  background(5, 10, 25);
+  if (backgroundTexture) {
+    image(backgroundTexture, 0, 0, width, height);
+  } else {
+    background(5, 10, 25);
+  }
 
   push(); // MAIN SCREEN SHAKE PUSH
   if (shakeMag > 0.1) {
@@ -215,21 +227,48 @@ function draw() {
   // --- Edge Decorative Orbs ---
   // ==========================================
   push();
-  noStroke();
   if (isFlipped) {
-    // Left side orb is now P2 zone (greenish)
-    fill(150, 255, 150, 30);
-    ellipse(0, height / 2, width * 0.2, height * 0.4);
-    // Right side orb is now P1 zone (blueish)
-    fill(0, 150, 255, 30);
-    ellipse(width, height / 2, width * 0.2, height * 0.4);
+    // Left side orb is now P2 zone (moon texture)
+    if (moonTexture) {
+      imageMode(CENTER);
+      image(moonTexture, 0, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(150, 255, 150, 30);
+      ellipse(0, height / 2, width * 0.2, height * 0.4);
+    }
+    // Right side orb is now P1 zone (earth texture)
+    if (earthTexture) {
+      imageMode(CENTER);
+      image(earthTexture, width, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(0, 150, 255, 30);
+      ellipse(width, height / 2, width * 0.2, height * 0.4);
+    }
   } else {
-    // Left side orb (P1 zone) - blueish
-    fill(0, 150, 255, 30);
-    ellipse(0, height / 2, width * 0.2, height * 0.4);
-    // Right side orb (P2 zone) - greenish
-    fill(150, 255, 150, 30);
-    ellipse(width, height / 2, width * 0.2, height * 0.4);
+    // Left side orb (P1 zone) - earth texture
+    if (earthTexture) {
+      imageMode(CENTER);
+      image(earthTexture, 0, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(0, 150, 255, 30);
+      ellipse(0, height / 2, width * 0.2, height * 0.4);
+    }
+    // Right side orb (P2 zone) - moon texture
+    if (moonTexture) {
+      imageMode(CENTER);
+      image(moonTexture, width, height / 2, width * 0.2, width * 0.2);
+      imageMode(CORNER);
+    } else {
+      noStroke();
+      fill(150, 255, 150, 30);
+      ellipse(width, height / 2, width * 0.2, height * 0.4);
+    }
   }
   pop();
 
