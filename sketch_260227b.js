@@ -46,16 +46,16 @@ let orbitTargetAngle = 0;
 
 // --- physics constants ---
 const FRICTION = 0.95;
-const POWER = 0.2;
-let MAX_SPEED = 2; // Will be updated dynamically in draw()
+const POWER = 0.3;
+let MAX_SPEED = 4; // Will be updated dynamically in draw()
 
 function preload() {
   handPose = ml5.handPose();
   bgmSound = loadSound('SoundEffect/bgm.mp3');
   explosionSound = loadSound('SoundEffect/explosion.mp3');
   laserSound = loadSound('SoundEffect/lazer.mp3');
-  moonTexture = loadImage('image/moon.jpeg');
-  earthTexture = loadImage('image/earth.jpeg');
+  moonTexture = loadImage('image/moon.png');
+  earthTexture = loadImage('image/earth.png');
   backgroundTexture = loadImage('image/background.jpeg');
 }
 
@@ -231,7 +231,7 @@ function draw() {
     // Left side orb is now P2 zone (moon texture)
     if (moonTexture) {
       imageMode(CENTER);
-      image(moonTexture, 0, height / 2, width * 0.2, width * 0.2);
+      image(earthTexture, 0, height / 2, width * 0.2, width * 0.2);
       imageMode(CORNER);
     } else {
       noStroke();
@@ -241,7 +241,7 @@ function draw() {
     // Right side orb is now P1 zone (earth texture)
     if (earthTexture) {
       imageMode(CENTER);
-      image(earthTexture, width, height / 2, width * 0.2, width * 0.2);
+      image(moonTexture, width, height / 2, width * 0.2, width * 0.2);
       imageMode(CORNER);
     } else {
       noStroke();
@@ -363,8 +363,8 @@ function draw() {
     // ▼ ここからが円を回る「Orbit Animation」
     // =====================================
     // Rotation logic relies purely on the P1 side (Right orb)
-    let centerX = width + 170;
-    let centerY = height / 2;
+    let centerX = width + 250;
+    let centerY = height / 3;
 
     orbitAngle += 0.05;
 
@@ -607,7 +607,7 @@ function drawUI() {
   textSize(16);
   textAlign(CENTER, CENTER);
   textStyle(BOLD);
-  text("ISD 60504 - SPATIAL COMBAT", width / 2, 20);
+  text("ISD 60504 - FLY ME TO THE MOON", width / 2, 20);
   pop();
 
   // ------------------------------------------------
