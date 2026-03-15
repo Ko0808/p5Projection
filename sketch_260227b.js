@@ -178,7 +178,7 @@ function respawnPlayer1() {
 
 function draw() {
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
-  MAX_SPEED = 2 * max(0.1, p1Health / 100);
+  MAX_SPEED = 2 * max(0.5, p1Health / 100);
 
   background(5, 10, 25);
 
@@ -219,17 +219,17 @@ function draw() {
   if (isFlipped) {
     // Left side orb is now P2 zone (greenish)
     fill(150, 255, 150, 30);
-    ellipse(-100, height / 2, width * 0.4, height * 0.8);
+    ellipse(0, height / 2, width * 0.2, height * 0.4);
     // Right side orb is now P1 zone (blueish)
     fill(0, 150, 255, 30);
-    ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+    ellipse(width, height / 2, width * 0.2, height * 0.4);
   } else {
     // Left side orb (P1 zone) - blueish
     fill(0, 150, 255, 30);
-    ellipse(-100, height / 2, width * 0.4, height * 0.8);
+    ellipse(0, height / 2, width * 0.2, height * 0.4);
     // Right side orb (P2 zone) - greenish
     fill(150, 255, 150, 30);
-    ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+    ellipse(width, height / 2, width * 0.2, height * 0.4);
   }
   pop();
 

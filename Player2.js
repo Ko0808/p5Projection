@@ -25,7 +25,7 @@ class Player2Ship {
             let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
             if (d < 40 && this.fireCooldown <= 0) {
                 this.fire();
-                this.fireCooldown = 15;
+                this.fireCooldown = 120;
             }
         }
 
@@ -64,9 +64,9 @@ class Laser {
         this.x = x;
         this.y = y;
         if (typeof isFlipped !== 'undefined' && isFlipped) {
-            this.speedX = 15;
+            this.speedX = 10;
         } else {
-            this.speedX = -15;
+            this.speedX = -10;
         }
     }
 
