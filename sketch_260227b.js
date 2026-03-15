@@ -52,7 +52,8 @@ let orbitTargetAngle = 0;
 // --- physics constants ---
 const FRICTION = 0.95;
 const POWER = 0.2;
-let MAX_SPEED = 2; // Will be updated dynamically in draw()
+const BASE_MAX_SPEED = 4; // 変更したい元の最高速度
+let MAX_SPEED = BASE_MAX_SPEED; // Will be updated dynamically in draw()
 
 function preload() {
   handPose = ml5.handPose();
@@ -68,7 +69,7 @@ function setup() {
   pMapper = createProjectionMapper(this);
   leftQuad = pMapper.createQuadMap(400, 800);
   rightQuad = pMapper.createQuadMap(400, 800);
-  
+
   leftPg = createGraphics(400, 800);
   rightPg = createGraphics(400, 800);
 
@@ -196,7 +197,7 @@ function respawnPlayer1() {
 
 function draw() {
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
-  MAX_SPEED = 2 * max(0.1, p1Health / 100);
+  MAX_SPEED = BASE_MAX_SPEED * max(0.1, p1Health / 100);
 
   background(5, 10, 25);
 
@@ -239,22 +240,18 @@ function draw() {
   rightPg.clear();
 
   if (isFlipped) {
-    leftPg.background(150, 255, 150, 30);
     leftPg.noStroke();
     leftPg.fill(150, 255, 150, 80);
     leftPg.ellipse(200, 400, 300, 700);
 
-    rightPg.background(0, 150, 255, 30);
     rightPg.noStroke();
     rightPg.fill(0, 150, 255, 80);
     rightPg.ellipse(200, 400, 300, 700);
   } else {
-    leftPg.background(0, 150, 255, 30);
     leftPg.noStroke();
     leftPg.fill(0, 150, 255, 80);
     leftPg.ellipse(200, 400, 300, 700);
 
-    rightPg.background(150, 255, 150, 30);
     rightPg.noStroke();
     rightPg.fill(150, 255, 150, 80);
     rightPg.ellipse(200, 400, 300, 700);
@@ -667,7 +664,7 @@ function drawUI() {
   rect(p1PanelX, p1PanelY, panelW, panelH, 12);
 
   let speed = vel.mag();
-  let absoluteMaxSpeed = 2; // 体力MAX時の本当の最高速度
+  let absoluteMaxSpeed = BASE_MAX_SPEED; // 体力MAX時の本当の最高速度
   let currentSpeedRatio = speed / absoluteMaxSpeed;
   let maxPotentialRatio = MAX_SPEED / absoluteMaxSpeed; // ダメージによる上限ライン
 
