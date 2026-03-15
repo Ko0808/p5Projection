@@ -31,6 +31,9 @@ let leftQuad;
 let rightQuad;
 let leftPg;
 let rightPg;
+let customPoly;
+let customPg;
+let nekoImg;
 
 // --- Game State & VFX (Merged) ---
 let energyOrbs = [];
@@ -61,6 +64,7 @@ function preload() {
   explosionSound = loadSound('SoundEffect/explosion.mp3');
   laserSound = loadSound('SoundEffect/lazer.mp3');
   customFont = loadFont('Roboto-Regular.ttf');
+  nekoImg = loadImage('image/iraresan_rensyuu_neko.png');
 }
 
 function setup() {
@@ -72,6 +76,10 @@ function setup() {
 
   leftPg = createGraphics(400, 800);
   rightPg = createGraphics(400, 800);
+
+  // 自由に変形できる多角形 (ここでは5角形を指定。数字を変えれば頂点数が変わります)
+  customPoly = pMapper.createPolyMap(5); 
+  customPg = createGraphics(400, 400);
 
   video = createCapture(VIDEO);
   video.size(640, 480);
@@ -255,6 +263,15 @@ function draw() {
     rightPg.noStroke();
     rightPg.fill(150, 255, 150, 80);
     rightPg.ellipse(200, 400, 300, 700);
+  }
+
+  // ==========================================
+  // --- Custom Polygon (p5.mapper) ---
+  // ==========================================
+  customPg.clear();
+  if (nekoImg) {
+    customPg.imageMode(CENTER);
+    customPg.image(nekoImg, customPg.width / 2, customPg.height / 2, customPg.width, customPg.height);
   }
 
   // ==========================================
@@ -508,6 +525,7 @@ function draw() {
   // p5.mapper rendering
   leftQuad.displayTexture(leftPg);
   rightQuad.displayTexture(rightPg);
+  customPoly.displayTexture(customPg);
 }
 
 // Boundary handling: When the rocket reaches the edges, it loops to the opposite side
