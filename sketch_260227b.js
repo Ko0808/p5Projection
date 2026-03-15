@@ -3,6 +3,9 @@ let handPose;
 let video;
 let hands = [];
 
+// --- fonts ---
+let customFont;
+
 // --- sounds ---
 let bgmSound;
 let explosionSound;
@@ -21,6 +24,13 @@ let angle = 90;
 let p1Trail = [];
 let currentJoyDX = 0;
 let currentJoyDY = 0;
+
+// --- Mapper ---
+let pMapper;
+let leftQuad;
+let rightQuad;
+let leftPg;
+let rightPg;
 
 // --- Game State & VFX (Merged) ---
 let energyOrbs = [];
@@ -49,10 +59,18 @@ function preload() {
   bgmSound = loadSound('SoundEffect/bgm.mp3');
   explosionSound = loadSound('SoundEffect/explosion.mp3');
   laserSound = loadSound('SoundEffect/lazer.mp3');
+  customFont = loadFont('Roboto-Regular.ttf');
 }
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  createCanvas(windowWidth, windowHeight, WEBGL);
+
+  pMapper = createProjectionMapper(this);
+  leftQuad = pMapper.createQuadMap(400, 800);
+  rightQuad = pMapper.createQuadMap(400, 800);
+  
+  leftPg = createGraphics(400, 800);
+  rightPg = createGraphics(400, 800);
 
   video = createCapture(VIDEO);
   video.size(640, 480);
@@ -182,6 +200,9 @@ function draw() {
 
   background(5, 10, 25);
 
+  push(); // 2D GAME LOGIC PUSH
+  translate(-width / 2, -height / 2); // WEBGL 座標系で左上を (0,0) とするための調整
+
   push(); // MAIN SCREEN SHAKE PUSH
   if (shakeMag > 0.1) {
     translate(random(-shakeMag, shakeMag), random(-shakeMag, shakeMag));
@@ -189,13 +210,12 @@ function draw() {
   }
 
   // Draw mirrored video at low opacity.
-  // Using globalAlpha instead of tint() for hardware-accelerated blending.
   push();
   translate(width, 0);
   scale(-1, 1);
-  drawingContext.globalAlpha = 50 / 255;
+  tint(255, 50); // Replace globalAlpha with tint for WEBGL
   image(video, 0, 0, width, height);
-  drawingContext.globalAlpha = 1.0;
+  noTint();
   pop();
 
   drawGrid();
@@ -207,31 +227,38 @@ function draw() {
   push();
   stroke(0, 200, 255, 150);
   strokeWeight(2);
-  drawingContext.setLineDash([15, 15]); // Dashed line effect
-  line(width / 2, 0, width / 2, height);
+  for (let y = 0; y < height; y += 30) {
+    line(width / 2, y, width / 2, min(y + 15, height));
+  }
   pop();
 
   // ==========================================
-  // --- Edge Decorative Orbs ---
+  // --- Edge Decorative Orbs (p5.mapper) ---
   // ==========================================
-  push();
-  noStroke();
+  leftPg.clear();
+  rightPg.clear();
+
   if (isFlipped) {
-    // Left side orb is now P2 zone (greenish)
-    fill(150, 255, 150, 30);
-    ellipse(-100, height / 2, width * 0.4, height * 0.8);
-    // Right side orb is now P1 zone (blueish)
-    fill(0, 150, 255, 30);
-    ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+    leftPg.background(150, 255, 150, 30);
+    leftPg.noStroke();
+    leftPg.fill(150, 255, 150, 80);
+    leftPg.ellipse(200, 400, 300, 700);
+
+    rightPg.background(0, 150, 255, 30);
+    rightPg.noStroke();
+    rightPg.fill(0, 150, 255, 80);
+    rightPg.ellipse(200, 400, 300, 700);
   } else {
-    // Left side orb (P1 zone) - blueish
-    fill(0, 150, 255, 30);
-    ellipse(-100, height / 2, width * 0.4, height * 0.8);
-    // Right side orb (P2 zone) - greenish
-    fill(150, 255, 150, 30);
-    ellipse(width + 170, height / 2, width * 0.4, height * 0.8);
+    leftPg.background(0, 150, 255, 30);
+    leftPg.noStroke();
+    leftPg.fill(0, 150, 255, 80);
+    leftPg.ellipse(200, 400, 300, 700);
+
+    rightPg.background(150, 255, 150, 30);
+    rightPg.noStroke();
+    rightPg.fill(150, 255, 150, 80);
+    rightPg.ellipse(200, 400, 300, 700);
   }
-  pop();
 
   // ==========================================
   // --- Hand Separation and Assignment Logic ---
@@ -478,6 +505,12 @@ function draw() {
 
   pop(); // END MAIN SCREEN SHAKE PUSH
   drawUI();
+
+  pop(); // END 2D GAME LOGIC PUSH
+
+  // p5.mapper rendering
+  leftQuad.displayTexture(leftPg);
+  rightQuad.displayTexture(rightPg);
 }
 
 // Boundary handling: When the rocket reaches the edges, it loops to the opposite side
@@ -565,6 +598,7 @@ function drawUI() {
   rect(0, 0, width, 40);
 
   fill(0, 200, 255);
+  textFont(customFont);
   textSize(16);
   textAlign(CENTER, CENTER);
   textStyle(BOLD);
@@ -590,6 +624,7 @@ function drawUI() {
   rect(topBarX, topBarY, topBarW * (energyProgress / 100), topBarH, 6);
 
   fill(255);
+  textFont(customFont);
   textSize(12);
   textAlign(CENTER, CENTER);
   text("CLEAN ENERGY COLLECTED: " + energyProgress + "%", width / 2, topBarY + topBarH / 2 + 1);
@@ -598,6 +633,7 @@ function drawUI() {
   // 任务成功/失败高亮反馈
   if (missionResultTimer > 0) {
     push();
+    textFont(customFont);
     textAlign(CENTER, CENTER);
     textStyle(BOLD);
     let alpha = map(sin(frameCount * 0.2), -1, 1, 100, 255);
@@ -636,6 +672,7 @@ function drawUI() {
   let maxPotentialRatio = MAX_SPEED / absoluteMaxSpeed; // ダメージによる上限ライン
 
   fill(160);
+  textFont(customFont);
   textSize(11);
   textAlign(LEFT, TOP);
   text('SPEED', p1PanelX + 12, p1PanelY + 12);
@@ -644,6 +681,7 @@ function drawUI() {
   text(nf(speed, 1, 1), p1PanelX + 12, p1PanelY + 26);
 
   fill(160);
+  textFont(customFont);
   textSize(11);
   text('INTEGRITY', p1PanelX + 90, p1PanelY + 12);
   fill(p1Health > 30 ? color(0, 200, 255) : color(255, 50, 50));
@@ -713,6 +751,7 @@ function drawUI() {
   rect(p2PanelX, p2PanelY, panelW, panelH, 12);
 
   fill(160);
+  textFont(customFont);
   textSize(11);
   textAlign(LEFT, TOP);
   text('WEAPONS', p2PanelX + 12, p2PanelY + 12);
@@ -723,6 +762,7 @@ function drawUI() {
   text(isReady ? "READY" : "COOL", p2PanelX + 12, p2PanelY + 26);
 
   fill(160);
+  textFont(customFont);
   textSize(11);
   text('ACTIVE LASERS', p2PanelX + 90, p2PanelY + 12);
   fill(255);
@@ -746,4 +786,26 @@ function drawUI() {
   line(cx2 - r, cy2, cx2 + r, cy2);
   line(cx2, cy2 - r, cx2, cy2 + r);
   pop();
+}
+
+// ----------------------------------------------------
+// Input / p5.mapper Calibration
+// ----------------------------------------------------
+function keyPressed() {
+  switch (key) {
+    case 'c':
+      pMapper.toggleCalibration();
+      break;
+    case 'f':
+      let fs = fullscreen();
+      document.getElementById("glcanvas");
+      fullscreen(!fs);
+      break;
+    case 'l':
+      pMapper.load();
+      break;
+    case 's':
+      pMapper.save();
+      break;
+  }
 }
