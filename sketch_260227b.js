@@ -358,7 +358,7 @@ function draw() {
       orbitRadius = max(orbitRadius, width * 0.1 + 50);
       orbitAngle = atan2(pos.y - centerY, pos.x - centerX);
       if (orbitAngle < 0) orbitAngle += TWO_PI;
-      orbitTargetAngle = orbitAngle + TWO_PI; // Orbit full circle (clockwise-ish from math)
+      orbitTargetAngle = orbitAngle + radians(330); // 315度 (7/8周) 回ったところで自然に放出する
     } else if (isFlipped && pos.x < 100) {
       if (energyProgress >= 100) {
         missionResult = 'SUCCESS';
@@ -397,11 +397,9 @@ function draw() {
       isTransitioning = false;
       isFlipped = true;
 
-      // Position after orbit completion
-      pos.x = width - 150;
-      pos.y = height / 2;
-      angle = PI + HALF_PI; // Face entirely left
-      vel.set(0, 0);
+      // 座標や角度は強制上書きせず、現在の状態を維持して放出する
+      // 円運動の勢い（接線方向の速度）を与えてスムーズに復帰させる
+      vel = p5.Vector.fromAngle(angle - HALF_PI).mult(MAX_SPEED * 2);
       p1Health = 100; // HP回復
       p1Trail = [];
 
