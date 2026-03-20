@@ -26,6 +26,7 @@ let angle = 90;
 let p1Trail = [];
 let currentJoyDX = 0;
 let currentJoyDY = 0;
+let outOfBoundsFrames = 0;
 
 // --- Game State & VFX (Merged) ---
 let energyOrbs = [];
@@ -171,6 +172,7 @@ function respawnPlayer1() {
   accel.set(0, 0);
   angle = HALF_PI;
   p1Trail = [];
+  outOfBoundsFrames = 0;
 
   for (let m of meteorites) {
     if (m) m.reset();
@@ -527,24 +529,43 @@ function draw() {
   drawUI();
 }
 
-// Boundary handling: When the rocket reaches the edges, it loops to the opposite side
-// It can cross the screen divider and move to the other side.
+// Boundary handling: 画面外に出たら5秒後に初期スポーン地点に戻る
 function handleEdges() {
-  if (isTransitioning) return; // アニメーション中は壁の判定を無効化する
-
-  // 左右（X軸）はループを廃止し、見えない壁にする（バグ防止）
-  if (pos.x > width) {
-    pos.x = width;
-    vel.x = 0;
-  }
-  if (pos.x < 0) {
-    pos.x = 0;
-    vel.x = 0;
+  if (isTransitioning) {
+    outOfBoundsFrames = 0;
+    return; // アニメーション中は壁の判定を無効化する
   }
 
-  // 上下（Y軸）は今まで通りループさせる
-  if (pos.y > height) pos.y = 0;
-  if (pos.y < 0) pos.y = height;
+  // 画面外判定 (完全に外に出たか余裕を持たせるなら +- 50)
+  let isOutOfBounds = pos.x < -50 || pos.x > width + 50 || pos.y < -50 || pos.y > height + 50;
+
+  if (isOutOfBounds) {
+    outOfBoundsFrames++;
+    if (outOfBoundsFrames >= 150) { // 30fps * 5s = 150 frames
+      // 初期スポーン地点に戻る
+      if (isFlipped) {
+        pos.x = width - 150;
+        pos.y = height / 2;
+        angle = PI + HALF_PI;
+      } else {
+        pos.x = 150;
+        pos.y = height / 2;
+        angle = HALF_PI;
+      }
+      vel.set(0, 0);
+      accel.set(0, 0);
+      p1Trail = [];
+      outOfBoundsFrames = 0;
+      
+      // Apply 20% damage penalty for going out of bounds
+      p1Health -= 20;
+      triggerShake(15);
+      spawnExplosion(pos.x, pos.y, color(255, 50, 50), 30);
+      if (typeof explosionSound !== 'undefined' && explosionSound.isLoaded()) explosionSound.play();
+    }
+  } else {
+    outOfBoundsFrames = 0;
+  }
 }
 
 // Shortest-path angle interpolation.
@@ -793,4 +814,20 @@ function drawUI() {
   line(cx2 - r, cy2, cx2 + r, cy2);
   line(cx2, cy2 - r, cx2, cy2 + r);
   pop();
+
+  // --- Out of Bounds Warning ---
+  if (outOfBoundsFrames >= 60) { // 3 seconds left (150 - 3*30 = 60)
+    let timeLeft = Math.ceil((150 - outOfBoundsFrames) / 30);
+    push();
+    let alpha = 200 + sin(frameCount * 0.4) * 55; // blinking effect
+    fill(255, 50, 50, alpha);
+    textSize(36);
+    textAlign(LEFT, CENTER);
+    textStyle(BOLD);
+    text("WARNING: BACK TO AREA", 50, height / 2 - 20);
+    textSize(24);
+    fill(255, alpha);
+    text("RESPAWN IN " + timeLeft + "s", 50, height / 2 + 20);
+    pop();
+  }
 }
