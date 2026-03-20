@@ -191,6 +191,11 @@ function draw() {
     return;
   }
 
+  if (gameState === 'TUTORIAL') {
+    drawTutorialScene();
+    return;
+  }
+
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
   MAX_SPEED = 2 * max(0.5, p1Health / 100);
 
@@ -885,7 +890,8 @@ function drawStartScene() {
 
     // Hand is open initially and closed to start
     if (closedHands > 0) {
-      gameState = 'PLAYING';
+      gameState = 'TUTORIAL';
+      initTutorial();
       userStartAudio();
       if (!bgmSound.isPlaying()) {
         bgmSound.setLoop(true);
