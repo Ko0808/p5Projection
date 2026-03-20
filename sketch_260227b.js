@@ -29,6 +29,8 @@ let currentJoyDY = 0;
 let outOfBoundsFrames = 0;
 
 // --- Game State & VFX (Merged) ---
+let gameState = 'START';
+let thumbnailImg;
 let energyOrbs = [];
 let energyProgress = 0; // 清洁能源收集进度 (0-100)
 let particles = [];
@@ -58,6 +60,7 @@ function preload() {
   moonTexture = loadImage('image/moon.png');
   earthTexture = loadImage('image/earth.png');
   backgroundTexture = loadImage('image/background.jpeg');
+  thumbnailImg = loadImage('image/thumbnail.png');
 }
 
 function setup() {
@@ -133,10 +136,6 @@ function drawStars() {
 // Ensure audio starts on first user interaction if blocked by browser
 function mousePressed() {
   userStartAudio();
-  if (!bgmSound.isPlaying()) {
-    bgmSound.setLoop(true);
-    bgmSound.loop();
-  }
 }
 
 function windowResized() {
@@ -187,6 +186,11 @@ function respawnPlayer1() {
 }
 
 function draw() {
+  if (gameState === 'START') {
+    drawStartScene();
+    return;
+  }
+
   // Healthに比例して最高速度を動的に変更する（完全に止まらないように最低速度0.2を保証）
   MAX_SPEED = 2 * max(0.5, p1Health / 100);
 
@@ -347,7 +351,7 @@ function draw() {
     let moonCenterY = height / 2;
     let moonRadius = width * 0.1;
     let distToMoon = dist(pos.x, pos.y, moonCenterX, moonCenterY);
-    
+
     if (!isFlipped && distToMoon <= moonRadius + 50) {
       // Trigger orbit around RIGHT orb
       isTransitioning = true;
@@ -554,7 +558,7 @@ function handleEdges() {
       accel.set(0, 0);
       p1Trail = [];
       outOfBoundsFrames = 0;
-      
+
       // Apply 20% damage penalty for going out of bounds
       p1Health -= 20;
       triggerShake(15);
@@ -827,5 +831,66 @@ function drawUI() {
     fill(255, alpha);
     text("RESPAWN IN " + timeLeft + "s", 50, height / 2 + 20);
     pop();
+  }
+}
+
+function drawStartScene() {
+  background(0);
+
+  // Draw the thumbnail image filling the entire screen first
+  if (thumbnailImg) {
+    image(thumbnailImg, 0, 0, width, height);
+  }
+
+  // Draw camera video slightly transparently on top so the user can see their hands
+  push();
+  translate(width, 0);
+  scale(-1, 1);
+  // drawingContext.globalAlpha = 100 / 255;
+  // if (video) image(video, 0, 0, width, height);
+  // drawingContext.globalAlpha = 1.0;
+  pop();
+
+  // Draw the instruction text over the image at the bottom
+  textAlign(CENTER, CENTER);
+  fill(255);
+  stroke(0);        // Black outline for readability
+  strokeWeight(6);
+  textSize(48);
+  text("Close your hands to start", width / 2, height * 0.8);
+  noStroke();       // Reset stroke
+
+
+  if (hands && hands.length > 0) {
+    let closedHands = 0;
+    let currentD = 0; // for debugging display
+    for (let hand of hands) {
+      let indexTip = getMappedPoint(hand.index_finger_tip);
+      let thumbTip = getMappedPoint(hand.thumb_tip);
+
+      let d = dist(indexTip.x, indexTip.y, thumbTip.x, thumbTip.y);
+      currentD = d; // save last hand's distance to show
+
+      // A closed hand or pinch will have index and thumb close to each other.
+      // 60 pixels is matching the main game logic where d > 40 is open.
+      if (d < 60) {
+        closedHands++;
+      }
+    }
+
+    // Debug info on screen
+    fill(0, 255, 0);
+    textSize(24);
+    // text("Hand Open/Close Value: " + round(currentD) + " (Needs to be < 60)", width / 2, 50);
+
+    // Hand is open initially and closed to start
+    if (closedHands > 0) {
+      gameState = 'PLAYING';
+      userStartAudio();
+      if (!bgmSound.isPlaying()) {
+        bgmSound.setLoop(true);
+        bgmSound.loop();
+      }
+    }
   }
 }
